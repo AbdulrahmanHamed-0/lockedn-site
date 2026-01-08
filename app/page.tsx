@@ -54,33 +54,33 @@ export default function FitnessAppLanding() {
       title: "Instant Feedback",
       desc: "Corrects your form in real time",
       color: "from-teal-600 to-cyan-700",
-      screenshots: ["/feed1.PNG", "/feed2.PNG", "/feed3.PNG"],
+      screenshots: ["/feed1.jpg", "/feed2.jpg", "/feed3.PNG"],
     },
     {
       title: "Auto Rep Count",
       desc: "Never worry about counting reps again",
       color: "from-cyan-700 to-teal-600",
       // ⬇️ change these names to match your real files if they differ
-      screenshots: ["/rep1.PNG", "/rep2.PNG"],
+      screenshots: ["/rep1.jpg", "/rep2.jpg"],
     },
     {
       title: "Train Anywhere",
       desc: "No excuses – just your phone & Wi‑Fi",
       color: "from-teal-600 to-cyan-700",
-      screenshots: ["/anywhere1.PNG", "/anywhere2.PNG", "/anywhere3.PNG"],
+      screenshots: ["/anywhere2.jpg", "/anywhere1.png", "/anywhere3.png"],
     },
     {
       title: "Exercise Library",
       desc: "Guided variety of workouts",
       color: "from-teal-600 to-cyan-600",
-      screenshots: ["/ex1.PNG", "/ex2.PNG"],
+      screenshots: ["/ex1.jpg", "/ex2.jpg"],
     },
     {
       title: "Progress Tracking",
       desc: "Track your gains over time",
       color: "from-cyan-600 to-teal-700",
       // ⬇️ change this name to your actual progress screenshot
-      screenshots: ["/progress1.PNG"],
+      screenshots: ["/progress1.jpg"],
     },
   ];
 
@@ -1238,8 +1238,6 @@ export default function FitnessAppLanding() {
       <video
         className="w-full h-full object-contain block md:hidden"
         autoPlay
-        loop
-        muted
         playsInline
         controls
       >
@@ -1251,8 +1249,6 @@ export default function FitnessAppLanding() {
       <video
         className="w-full h-full object-contain hidden md:block"
         autoPlay
-        loop
-        muted
         playsInline
         controls
       >
@@ -1490,7 +1486,10 @@ export default function FitnessAppLanding() {
                   />
                 </svg>
               </div>
+
               <div>
+
+                
                 <h3 className="font-semibold text-lg group-hover:text-cyan-400 transition-colors duration-500">
                   Exercise Library
                 </h3>
@@ -1499,6 +1498,25 @@ export default function FitnessAppLanding() {
                 </p>
               </div>
             </div>
+            {/* Progress Tracking (new) */}
+<div
+  onClick={() => handleFeatureClick(5)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
+>
+  <div className="relative">
+    {/* using Target icon already imported — swap if you want a different icon */}
+    <Target className="w-6 h-6 text-cyan-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500" />
+  </div>
+  <div>
+    <h3 className="font-semibold text-lg group-hover:text-cyan-400 transition-colors duration-500">
+      Progress Tracking
+    </h3>
+    <p className="text-gray-400 text-sm">
+      Track your gains over time
+    </p>
+  </div>
+</div>
+
           </div>
               
 {/* Slider */}
