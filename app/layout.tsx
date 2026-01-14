@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Locked'n – Your Personal AI Trainer",
   description:
-    "Revolutionary AI-powered form tracking using just your phone camera. Fix your form without going broke on personal trainers — your AI coach is with you 24/7 so you can train anywhere, anytime using only your phone.",
+    "Revolutionary AI-powered form tracking using just your phone camera. Fix your form without going broke using your own 24/7 AI trainer...",
   other: {
     "color-scheme": "dark light",
   },
