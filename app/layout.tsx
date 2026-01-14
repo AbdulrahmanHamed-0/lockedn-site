@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Locked'n – Your Personal AI Trainer",
+  title: "Locked'n – Your Personal AI Trainer App",
   description:
     "Revolutionary AI-powered form tracking using just your phone camera. Fix your form without going broke using your own 24/7 AI trainer...",
   other: {
