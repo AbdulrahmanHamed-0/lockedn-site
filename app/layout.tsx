@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Locked'n – Your Personal AI Trainer",
   description:
-    "Revolutionary AI-powered form tracking using just your phone camera. Experience a new era of fitness where your personal AI trainer is with you 24/7—delivering real-time coaching that regular workout apps can’t match, so you can train anywhere, anytime, using only your phone.",
+    "Revolutionary AI-powered form tracking using just your phone camera. Fix your form without going broke on personal trainers — your AI coach is with you 24/7 so you can train anywhere, anytime using only your phone.",
   other: {
     "color-scheme": "dark light",
   },
@@ -26,6 +26,7 @@ export const metadata: Metadata = {
     apple: "/logo.png",
   },
 };
+
 
 export default function RootLayout({
   children,
