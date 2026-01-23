@@ -78,7 +78,7 @@ export default function FitnessAppLanding() {
       title: "Progress Tracking",
       desc: "Track your gains over time",
       color: "from-teal-600 to-cyan-700",
-      screenshots: ["/progress1.jpg", "/progress2.PNG"], // 👈 new image added
+      screenshots: ["/progress1.jpg", "/progress2.png"], // 👈 new image added
     },
   ];
   
