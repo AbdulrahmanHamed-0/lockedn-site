@@ -78,7 +78,7 @@ export default function FitnessAppLanding() {
       title: "Progress Tracking",
       desc: "Track your gains over time",
       color: "from-teal-600 to-cyan-700",
-      screenshots: ["/progress1.jpg", "/progress2.png"], // 👈 new image added
+      screenshots: ["/progress1.jpg", "/progress2.jpg"], // 👈 new image added
     },
   ];
   
@@ -1487,7 +1487,7 @@ className="relative rounded-2xl overflow-hidden
             </div>
 
             <div
-  onClick={() => handleFeatureClick(0)}
+  onClick={() => handleFeatureClick(1)}
   className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
              border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
              hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
@@ -1514,11 +1514,11 @@ className="relative rounded-2xl overflow-hidden
             </div>
 
             <div
-  onClick={() => handleFeatureClick(0)}
-  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
-             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
-             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
-             hover:scale-105 transition-all duration-500 cursor-pointer group"
+onClick={() => handleFeatureClick(2)}
+className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+           border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+           hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+           hover:scale-105 transition-all duration-500 cursor-pointer group"
 >
 
 
@@ -1542,13 +1542,12 @@ className="relative rounded-2xl overflow-hidden
           {/* Feature cards – row 2 */}
           <div className="flex flex-wrap gap-6 justify-center mb-16 text-left w-full px-4">
           <div
-  onClick={() => handleFeatureClick(0)}
+  onClick={() => handleFeatureClick(3)}
   className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
              border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
              hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
              hover:scale-105 transition-all duration-500 cursor-pointer group"
 >
-
 
               <div className="relative">
                 <svg
@@ -1579,7 +1578,7 @@ className="relative rounded-2xl overflow-hidden
             </div>
 
             <div
-  onClick={() => handleFeatureClick(0)}
+  onClick={() => handleFeatureClick(4)}
   className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
              border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
              hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
@@ -1620,7 +1619,7 @@ className="relative rounded-2xl overflow-hidden
             </div>
             {/* Progress Tracking (new) */}
             <div
-  onClick={() => handleFeatureClick(0)}
+  onClick={() => handleFeatureClick(5)}
   className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
              border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
              hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
@@ -1698,17 +1697,19 @@ className="relative rounded-2xl overflow-hidden
               <div
                 className={`mt-4 hidden md:grid w-full mx-auto justify-items-center ${gridClasses} ${gapClass}`}
               >
-                {shots.map((src, i) => (
-            <button
-            onClick={() => openScreenshot(src)}
-            className="bg-black rounded-xl overflow-hidden flex items-center justify-center
-                       border-[2px] border-cyan-400/90
-                       md:shadow-[0_0_12px_rgba(34,211,238,0.70)]
-                       md:hover:border-white md:hover:shadow-[0_0_20px_rgba(255,255,255,0.30)]
-                       hover:scale-105
-                       transition-all duration-500 cursor-pointer
-                       w-full md:max-w-[220px] lg:max-w-[270px]"
-            >
+           {shots.map((src, i) => (
+  <button
+    key={`${image.title}-${i}`}
+    onClick={() => openScreenshot(src)}
+    className="bg-black rounded-xl overflow-hidden flex items-center justify-center
+               border-[2px] border-cyan-400/90
+               md:shadow-[0_0_12px_rgba(255,255,255,0.30)]
+               md:hover:border-white md:hover:shadow-[0_0_20px_rgba(255,255,255,0.30)]
+               hover:scale-105
+               transition-all duration-500 cursor-pointer
+               w-full md:max-w-[220px] lg:max-w-[270px]"
+  >
+            
             
                     <div className="w-full aspect-[9/16] bg-black">
                       <img
