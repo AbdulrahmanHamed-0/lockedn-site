@@ -47,7 +47,7 @@ export default function FitnessAppLanding() {
     {
       title: "AI Pose Detection",
       desc: "Real-time form tracking and analysis",
-      color: "from-cyan-600 to-cyan-700",
+      color: "from-teal-600 to-cyan-700",
       screenshots: ["/pose1.jpg", "/pose2.jpg", "/pose3.jpg"],
     },
     {
@@ -59,8 +59,7 @@ export default function FitnessAppLanding() {
     {
       title: "Auto Rep Count",
       desc: "Never worry about counting reps again",
-      color: "from-cyan-700 to-teal-600",
-      // ⬇️ change these names to match your real files if they differ
+      color: "from-teal-600 to-cyan-700",
       screenshots: ["/rep1.jpg", "/rep2.jpg"],
     },
     {
@@ -72,17 +71,17 @@ export default function FitnessAppLanding() {
     {
       title: "Exercise Library",
       desc: "Guided variety of workouts",
-      color: "from-teal-600 to-cyan-600",
+      color: "from-teal-600 to-cyan-700",
       screenshots: ["/ex1.jpg", "/ex2.jpg"],
     },
     {
       title: "Progress Tracking",
       desc: "Track your gains over time",
-      color: "from-cyan-600 to-teal-700",
-      // ⬇️ change this name to your actual progress screenshot
-      screenshots: ["/progress1.jpg"],
+      color: "from-teal-600 to-cyan-700",
+      screenshots: ["/progress1.jpg", "/progress2.png"], // 👈 new image added
     },
   ];
+  
 
     // For mobile: track which screenshot index is shown in each slide
     const [mobileShotIndices, setMobileShotIndices] = useState<number[]>(
@@ -250,12 +249,16 @@ export default function FitnessAppLanding() {
 
   const Divider = () => (
     <div className="w-full flex justify-center px-4">
-    <div className="relative w-full max-w-6xl h-1 mt-0 mb-16 overflow-hidden rounded-full">
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-70 animate-pulse"></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 via-purple-500 to-cyan-400 blur-sm"></div>
+      <div
+        className="relative w-full max-w-6xl h-[2px] mt-0 mb-16 overflow-hidden rounded-full
+                   shadow-[0_0_12px_rgba(34,211,238,0.4)]"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-80" />
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 via-purple-500 to-cyan-400 blur-sm opacity-60" />
       </div>
     </div>
   );
+  
 
   const TermsModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowTerms(false)}>
@@ -1107,12 +1110,12 @@ export default function FitnessAppLanding() {
 
   return (
     <div className="min-h-screen relative text-white overflow-hidden">
-      <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-purple-800 to-purple-950"></div>
-      <div className="fixed inset-0 bg-gradient-to-tr from-purple-600/20 via-transparent to-purple-900/20 opacity-80"></div>
-      <div className="fixed inset-0 bg-gradient-to-bl from-indigo-600/10 via-purple-700/10 to-violet-900/10 opacity-60"></div>
-      
+<div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-black"></div>
+<div className="fixed inset-0 bg-gradient-to-tr from-cyan-900/40 via-transparent to-slate-900/40 opacity-80"></div>
+<div className="fixed inset-0 bg-gradient-to-bl from-sky-900/30 via-cyan-800/10 to-slate-900/30 opacity-60"></div>
+
       <div 
-        className="fixed w-96 h-96 bg-purple-500/30 rounded-full blur-3xl"
+        className="fixed w-96 h-96 bg-purple-500/30 rounded-full blur-3xl lg:hidden"
         style={{ 
           top: `${20 - scrollY * 0.1}px`,
           left: `${20 + scrollY * 0.05}px`,
@@ -1120,7 +1123,7 @@ export default function FitnessAppLanding() {
         }}
       ></div>
       <div 
-        className="fixed w-80 h-80 bg-indigo-500/30 rounded-full blur-3xl"
+        className="fixed w-80 h-80 bg-indigo-500/30 rounded-full blur-3xl lg:hidden"
         style={{ 
           bottom: `${40 - scrollY * 0.08}px`,
           right: `${40 + scrollY * 0.06}px`,
@@ -1128,7 +1131,7 @@ export default function FitnessAppLanding() {
         }}
       ></div>
       <div 
-        className="fixed w-64 h-64 bg-violet-500/20 rounded-full blur-3xl"
+        className="fixed w-64 h-64 bg-violet-500/20 rounded-full blur-3xl lg:hidden"
         style={{ 
           top: '50%',
           left: '50%',
@@ -1138,7 +1141,7 @@ export default function FitnessAppLanding() {
       ></div>
 
       <div 
-        className="fixed w-96 h-96 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none"
+        className="fixed w-96 h-96 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none lg:hidden" 
         style={{
           left: `${mousePosition.x - 192}px`,
           top: `${mousePosition.y - 192}px`,
@@ -1168,25 +1171,33 @@ export default function FitnessAppLanding() {
     className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
     onClick={closeScreenshot}
   >
-    <div
-      className="relative w-full max-w-xs md:max-w-sm aspect-[9/16] bg-black rounded-2xl border border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.8)] overflow-hidden"
+     <div
+      className="relative w-full max-w-xs md:max-w-sm aspect-[9/16] bg-black rounded-2xl
+                 border border-white/80 shadow-[0_0_18px_rgba(255,255,255,0.35)]
+                 overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
-      <button
-        type="button"
-        onClick={closeScreenshot}
-        className="absolute top-2 right-2 z-10 p-2 rounded-full bg-black/70 hover:bg-cyan-600/80 border border-cyan-400/60 hover:scale-110 transition-all duration-200"
-      >
-        <svg
-          className="w-4 h-4 text-cyan-200"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+<button
+  type="button"
+  onClick={closeScreenshot}
+  className="absolute top-2 right-2 z-10 p-2 rounded-full
+             bg-white/10 border border-white/40 text-white/75
+             backdrop-blur-sm
+             hover:bg-white/25 hover:text-white
+             hover:shadow-[0_0_10px_rgba(34,211,238,0.6)]
+             hover:scale-110
+             transition-all duration-200"
+>
+  <svg
+    className="w-4 h-4"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+</button>
 
       <img
         src={activeScreenshot}
@@ -1199,15 +1210,19 @@ export default function FitnessAppLanding() {
 
 
 
-<section className="relative min-h-screen flex items-center justify-center px-4 pt-20 pb-32">
+<section className="relative min-h-screen flex items-center justify-center px-4 pt-20 pb-28">
   <div className="relative z-10 w-full max-w-6xl mx-auto text-center">
     {/* Logo + title */}
     <div className="mb-12 flex flex-col items-center">
-      <h2 className="text-6xl md:text-8xl font-bold bg-gradient-to-r from-cyan-400 via-cyan-300 to-cyan-500 bg-clip-text text-transparent mb-6 drop-shadow-[0_0_30px_rgba(34,211,238,0.5)]">
-        Locked'n
-      </h2>
+    <h2 className="text-6xl md:text-8xl font-bold mb-6 text-cyan-400">
+  Locked'n
+</h2>
+
+
+
       <div className="relative w-32 h-32 group cursor-pointer">
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-cyan-400 opacity-75 blur-md animate-pulse group-hover:blur-xl group-hover:opacity-100 transition-all duration-500"></div>
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-cyan-400 opacity-60 blur-sm group-hover:opacity-90 group-hover:blur-md transition-all duration-500"></div>
+
         <div className="relative w-full h-full rounded-2xl p-1 bg-gradient-to-r from-cyan-400 via-cyan-500 to-cyan-400 transform group-hover:scale-110 transition-transform duration-500">
           <div className="w-full h-full rounded-[14px] bg-white overflow-hidden shadow-2xl group-hover:shadow-cyan-500/60 transition-shadow duration-500">
             <img src="/logo.png" alt="Locked'n Logo" className="w-full h-full object-cover" />
@@ -1219,7 +1234,7 @@ export default function FitnessAppLanding() {
     {/* Hero heading + subtext */}
     <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight px-4">
       Your Personal{" "}
-      <span className="bg-gradient-to-r from-cyan-400 via-cyan-300 to-cyan-500 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(34,211,238,0.6)]">
+      <span className="bg-gradient-to-r from-cyan-400 via-cyan-300 to-cyan-500 bg-clip-text text-transparent">
         AI Trainer
       </span>
     </h1>
@@ -1231,7 +1246,15 @@ export default function FitnessAppLanding() {
 
 {/* Video */}
 <div className="w-full max-w-sm md:max-w-5xl mx-auto mb-8">
-  <div className="relative rounded-2xl overflow-hidden shadow-2xl border-2 border-cyan-500/30 hover:border-cyan-400/60 hover:shadow-cyan-500/40 transition-all duration-500">
+ <div
+className="relative rounded-2xl overflow-hidden
+           border border-cyan-500/70
+           shadow-[0_0_12px_rgba(255,255,255,0.30)]
+           hover:border-cyan-300
+           hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+           transition-all duration-500"
+>
+
     {/* Mobile: 9/16 (1080x1920), Desktop/Tablet: 16/9 */}
     <div className="aspect-[9/16] md:aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
       {/* Mobile video (phone) */}
@@ -1312,7 +1335,15 @@ export default function FitnessAppLanding() {
 
     <div className="flex flex-wrap gap-4 md:gap-6 mt-15 mb-4  justify-center items-stretch">
       <div className="group">
-        <div className="relative w-64 md:w-72 bg-black/80 backdrop-blur-sm px-6 py-4 md:px-8 md:py-5 rounded-2xl border border-cyan-500/30 shadow-[0_0_12px_rgba(34,211,238,0.35)] group-hover:shadow-[0_0_22px_rgba(34,211,238,0.7)] group-hover:border-cyan-300/80 transition-all duration-500 cursor-not-allowed transform group-hover:-translate-y-1">
+      <div
+  className="relative w-64 md:w-72 bg-black/80 backdrop-blur-sm px-6 py-4 md:px-8 md:py-5
+             rounded-2xl border-[0.5px] border-white/70 shadow-[0_0_12px_rgba(34,211,238,0.35)]
+             group-hover:shadow-[0_0_18px_rgba(34,211,238,0.7)] group-hover:border-cyan-300
+             transition-all duration-500 cursor-not-allowed transform group-hover:-translate-y-1"
+>
+
+
+
           <div className="flex items-center gap-3">
             <svg
               className="w-9 h-9 text-white group-hover:scale-110 transition-transform duration-500"
@@ -1335,7 +1366,15 @@ export default function FitnessAppLanding() {
       </div>
 
       <div className="group">
-        <div className="relative w-64 md:w-72 bg-black/80 backdrop-blur-sm px-6 py-4 md:px-8 md:py-5 rounded-2xl border border-cyan-500/30 shadow-[0_0_12px_rgba(34,211,238,0.35)] group-hover:shadow-[0_0_22px_rgba(34,211,238,0.7)] group-hover:border-cyan-300/80 transition-all duration-500 cursor-not-allowed transform group-hover:-translate-y-1">
+      <div
+  className="relative w-64 md:w-72 bg-black/80 backdrop-blur-sm px-6 py-4 md:px-8 md:py-5
+             rounded-2xl border-[0.5px] border-white/70 shadow-[0_0_12px_rgba(34,211,238,0.35)]
+             group-hover:shadow-[0_0_18px_rgba(34,211,238,0.7)] group-hover:border-cyan-300
+             transition-all duration-500 cursor-not-allowed transform group-hover:-translate-y-1"
+>
+
+
+
           <div className="flex items-center gap-3">
             <svg
               className="w-9 h-9 text-white group-hover:scale-110 transition-transform duration-500"
@@ -1360,14 +1399,14 @@ export default function FitnessAppLanding() {
 
 
 
-<section className="relative pt-0 pb-5 px-4">
+<section className="relative pt-0 pb-0- px-0">
   {/* ...Lock In button + early access text stays here... */}
 </section>
 
 
 
 
-<section className="relative pt-9 pb-0 mt-0 px-4">
+<section className="relative pt-10 pb-0 mt-0 px-4">
   <div className="w-full max-w-2xl mx-auto text-center -mt-0">
     <button 
       onClick={() => {
@@ -1379,12 +1418,18 @@ export default function FitnessAppLanding() {
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
       <span className="relative z-10">Lock In</span>
     </button>
-    <p className="mt-8 text-gray-300 px-4">
-  Join the early access list to get a private invite when{" "}
-  <span className="text-cyan-400 font-semibold">Locked'n</span> launches.
-  <span className="block text-sm text-gray-400 mt-0">
-    We use your email for launch updates .. no spam, no selling, just a heads‑up.
+    <p className="mt-5 px-4 text-xs md:text-sm text-cyan-100/80 leading-relaxed">
+  <span className="text-white">Join </span>
+  <span
+    className="text-cyan-400 font-semibold"
+    style={{ WebkitTextStroke: "0.75px white" }}
+  >
+    100+
   </span>
+  <span className="text-white"> users</span>
+</p>
+  <p className="mt-1 px-4 text-xs md:text-sm text-cyan-100/80 leading-relaxed">
+  We use your email for launch updates .. no spam, no selling, just a heads‑up.
 </p>
 
   </div>
@@ -1401,25 +1446,33 @@ export default function FitnessAppLanding() {
 
           <section className="relative pt-12 pb-4 px-4">
   <div className="w-full max-w-6xl mx-auto">
-    <h2 className="text-4xl md:text-5xl font-bold text-center mb-8 md:mb-16 px-4">
-      Fix Your{" "}
-      <span className="text-cyan-400">Form</span>{" "}
-      Without Going{" "}
-      <span className="text-cyan-400">Broke</span>
-    </h2>
+  <h2 className="text-4xl md:text-5xl font-bold text-center mb-8 md:mb-16 px-4">
+  Fix Your{" "}
+  <span className="text-cyan-400">Form</span>{" "}
+  Without Going{" "}
+  <span className="text-cyan-400">Broke</span>
+</h2>
+
+
+
 
     {/* Mobile helper text */}
-    <p className="mt-1 mb-6 text-sm text-cyan-200 text-center md:hidden">
+    <p className="mt-1 mb-6 text-sm text-white-200 text-center md:hidden">
       Select a feature to preview it below.
     </p>
 
 
           {/* Feature cards – row 1 */}
           <div className="flex flex-wrap gap-6 justify-center mb-6 text-left w-full px-4">
-            <div
-              onClick={() => handleFeatureClick(0)}
-              className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
-            >
+          <div
+  onClick={() => handleFeatureClick(0)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+             hover:scale-105 transition-all duration-500 cursor-pointer group"
+>
+
+
               <div className="relative">
                 <Camera className="w-6 h-6 text-cyan-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500" />
               </div>
@@ -1434,11 +1487,21 @@ export default function FitnessAppLanding() {
             </div>
 
             <div
-              onClick={() => handleFeatureClick(1)}
-              className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
-            >
+  onClick={() => handleFeatureClick(0)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+             hover:scale-105 transition-all duration-500 cursor-pointer group"
+>
+
+
               <div className="relative">
-                <Target className="w-6 h-6 text-purple-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500" />
+              <Target
+  className="w-6 h-6 text-purple-400 mt-1 flex-shrink-0
+             group-hover:text-purple-300 group-hover:drop-shadow-[0_0_8px_rgba(196,181,253,0.8)]
+             transition-all duration-500"
+/>
+
               </div>
               <div>
                 <h3 className="font-semibold text-lg group-hover:text-cyan-400 transition-colors duration-500">
@@ -1451,11 +1514,21 @@ export default function FitnessAppLanding() {
             </div>
 
             <div
-              onClick={() => handleFeatureClick(2)}
-              className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
-            >
+  onClick={() => handleFeatureClick(0)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+             hover:scale-105 transition-all duration-500 cursor-pointer group"
+>
+
+
               <div className="relative">
-                <Zap className="w-6 h-6 text-yellow-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500" />
+              <Zap
+  className="w-6 h-6 text-yellow-400 mt-1 flex-shrink-0
+             group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)]
+             transition-all duration-500"
+/>
+
               </div>
               <div>
                 <h3 className="font-semibold text-lg group-hover:text-cyan-400 transition-colors duration-500">
@@ -1467,14 +1540,22 @@ export default function FitnessAppLanding() {
           </div>
 
           {/* Feature cards – row 2 */}
-          <div className="flex flex-wrap gap-6 justify-center mb-12 text-left w-full px-4">
-            <div
-              onClick={() => handleFeatureClick(3)}
-              className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
-            >
+          <div className="flex flex-wrap gap-6 justify-center mb-16 text-left w-full px-4">
+          <div
+  onClick={() => handleFeatureClick(0)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+             hover:scale-105 transition-all duration-500 cursor-pointer group"
+>
+
+
               <div className="relative">
                 <svg
-                  className="w-6 h-6 text-green-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500"
+                 className="w-6 h-6 text-green-400 mt-1 flex-shrink-0
+                 group-hover:text-green-300 group-hover:drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]
+                 transition-all duration-500"
+      
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -1498,12 +1579,21 @@ export default function FitnessAppLanding() {
             </div>
 
             <div
-              onClick={() => handleFeatureClick(4)}
-              className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
-            >
+  onClick={() => handleFeatureClick(0)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+             hover:scale-105 transition-all duration-500 cursor-pointer group"
+>
+
+
+
               <div className="relative">
                 <svg
-                  className="w-6 h-6 text-orange-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500"
+               className="w-6 h-6 text-orange-400 mt-1 flex-shrink-0
+               group-hover:text-orange-300 group-hover:drop-shadow-[0_0_8px_rgba(253,186,116,0.8)]
+               transition-all duration-500"
+    
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -1529,13 +1619,22 @@ export default function FitnessAppLanding() {
               </div>
             </div>
             {/* Progress Tracking (new) */}
-<div
-  onClick={() => handleFeatureClick(5)}
-  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl border border-gray-700/50 w-64 hover:bg-gray-800/60 hover:border-cyan-500/60 hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-105 transition-all duration-500 cursor-pointer group"
+            <div
+  onClick={() => handleFeatureClick(0)}
+  className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
+             border border-cyan-500/70 shadow-[0_0_12px_rgba(255,255,255,0.30)] w-64
+             hover:bg-gray-800/60 hover:border-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.7)]
+             hover:scale-105 transition-all duration-500 cursor-pointer group"
 >
+
+
   <div className="relative">
     {/* using Target icon already imported — swap if you want a different icon */}
-    <Target className="w-6 h-6 text-cyan-400 mt-1 flex-shrink-0 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] transition-all duration-500" />
+    <Target
+  className="w-6 h-6 text-red-400 mt-1 flex-shrink-0 
+             group-hover:text-red-300 group-hover:drop-shadow-[0_0_8px_rgba(248,113,113,0.8)] 
+             transition-all duration-500"
+/>
   </div>
   <div>
     <h3 className="font-semibold text-lg group-hover:text-cyan-400 transition-colors duration-500">
@@ -1600,13 +1699,17 @@ export default function FitnessAppLanding() {
                 className={`mt-4 hidden md:grid w-full mx-auto justify-items-center ${gridClasses} ${gapClass}`}
               >
                 {shots.map((src, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => openScreenshot(src)}
-                    className="bg-black border border-cyan-400/80 rounded-xl overflow-hidden flex items-center justify-center hover:border-cyan-300 hover:shadow-[0_0_18px_rgba(34,211,238,0.7)] hover:scale-105 transition-all duration-300 cursor-pointer w-full md:max-w-[220px] lg:max-w-[270px]"
-
-                  >
+            <button
+            onClick={() => openScreenshot(src)}
+            className="bg-black rounded-xl overflow-hidden flex items-center justify-center
+                       border-[2px] border-cyan-400/90
+                       md:shadow-[0_0_12px_rgba(34,211,238,0.70)]
+                       md:hover:border-white md:hover:shadow-[0_0_20px_rgba(255,255,255,0.30)]
+                       hover:scale-105
+                       transition-all duration-500 cursor-pointer
+                       w-full md:max-w-[220px] lg:max-w-[270px]"
+            >
+            
                     <div className="w-full aspect-[9/16] bg-black">
                       <img
                         src={src}
@@ -1623,31 +1726,32 @@ export default function FitnessAppLanding() {
                 {activeSrc ? (
                   <>
                     <div className="relative w-full">
-                      {/* inner arrows – moved a bit further from the image */}
-                      <button
-                type="button"
-                onClick={() => changeMobileShot(index, "prev")}
-                className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden
-                          rounded-full bg-black/30 text-cyan-100 border border-cyan-400/40 p-2
-                          hover:bg-cyan-500/80 transition"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+                    <button
+  type="button"
+  onClick={() => changeMobileShot(index, "prev")}
+  className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden
+             rounded-full bg-white/10 border border-white/60 text-white/70
+             backdrop-blur-sm p-2
+             hover:bg-white/25 hover:text-white
+             hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50
+             transition-all duration-300"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => changeMobileShot(index, "next")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 md:hidden
-                          rounded-full bg-black/30 text-cyan-100 border border-cyan-400/40 p-2
-                          hover:bg-cyan-500/80 transition"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-
-
-
-
-                      <button
+            <button
+              type="button"
+              onClick={() => changeMobileShot(index, "next")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 md:hidden
+                        rounded-full bg-white/10 border border-white/60 text-white/70
+                        backdrop-blur-sm p-2
+                        hover:bg-white/25 hover:text-white
+                        hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50
+                        transition-all duration-300"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+                  <button
                         type="button"
                         onClick={() => openScreenshot(activeSrc)}
                         className="bg-black border border-cyan-400/80 rounded-xl overflow-hidden flex items-center justify-center w-full"
@@ -1676,33 +1780,31 @@ export default function FitnessAppLanding() {
       })}
     </div>
   </div>
-
-  {/* Left arrow – desktop / tablet only */}
-  <button
+{/* Left arrow – desktop / tablet only */}
+<button
   onClick={prevSlide}
   className="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2
-             bg-cyan-500/20 border border-cyan-400 text-cyan-300
+             bg-white-500/15 border border-white-400/70 text-white/70
              backdrop-blur-sm p-3 rounded-full
-             hover:bg-cyan-500/40 hover:text-white
+             hover:bg-white-500/35 hover:text-white
              hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50
              transition-all duration-300 cursor-pointer"
 >
   <ChevronLeft className="w-6 h-6" />
 </button>
 
-
+{/* Right arrow – desktop / tablet only */}
 <button
   onClick={nextSlide}
   className="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2
-             bg-cyan-500/20 border border-cyan-400 text-cyan-300
+             bg-white-500/15 border border-white-400/70 text-white/70
              backdrop-blur-sm p-3 rounded-full
-             hover:bg-cyan-500/40 hover:text-white
+             hover:bg-white-500/35 hover:text-white
              hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50
              transition-all duration-300 cursor-pointer"
 >
   <ChevronRight className="w-6 h-6" />
 </button>
-
 
 
 {/* Slider dots (all devices) */}
@@ -1731,11 +1833,21 @@ export default function FitnessAppLanding() {
       <Divider />
 
       <section id="early-access-form" className="relative py-7 px-4">
-        <div className="w-full max-w-xl mx-auto">
-          <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm p-8 md:p-12 rounded-2xl border border-gray-700/50 shadow-2xl hover:border-cyan-500/40 hover:shadow-cyan-500/30 transition-all duration-500">
-          <h2 className="text-3xl md:text-4xl font-bold mb-3 text-center drop-shadow-[0_0_20px_rgba(34,211,238,0.5)]">
+  <div className="w-full max-w-xl mx-auto">
+    <div
+      className="bg-gradient-to-br from-gray-800/60 to-gray-900/60 backdrop-blur-sm
+                 p-8 md:p-12 rounded-2xl
+                 border border-cyan-500/70
+                 shadow-[0_0_12px_rgba(255,255,255,0.30)]
+                 hover:border-cyan-300
+                 hover:shadow-[0_0_20px_rgba(34,211,238,0.70)]
+                 transition-all duration-500"
+    >
+
+          <h2 className="text-3xl md:text-4xl font-bold mb-3 text-center">
   Wanna <span className="text-cyan-400">Lock In?</span>
 </h2>
+
 
             <p className="text-gray-400 text-center mb-8">Be the first to experience AI-powered training</p>
 
@@ -1774,9 +1886,9 @@ export default function FitnessAppLanding() {
         </div>
       </section>
 
-
-      
       <footer className="relative border-t border-gray-800 py-12 px-4 mt-20 bg-gradient-to-b from-gray-900 to-black">
+
+
         <div className="w-full max-w-4xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-10">
             {/* Locked'n column */}
