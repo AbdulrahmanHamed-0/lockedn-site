@@ -169,7 +169,8 @@ export default function FitnessAppLanding() {
     );
 
     const handleFeatureClick = (index: number) => {
-      changeSlide(index);
+      // use the same helper as the arrow buttons so the timer resets
+      handleManualSlideChange(index);
     
       const sliderElement = document.getElementById("feature-slider");
       if (sliderElement) {
@@ -766,7 +767,7 @@ const PrivacyModal = () => (
           <p className="mt-2 text-[0.65rem] md:text-xs text-slate-300/80">
             Last updated :{" "}
             <span className="font-semibold text-white">
-            January 25, 2026
+            February 3, 2026
             </span>
           </p>
         </div>
@@ -797,469 +798,405 @@ const PrivacyModal = () => (
         </button>
       </div>
 
-      {/* BODY */}
-      <div
-        className="flex-1 overflow-y-auto px-6 md:px-8 py-6 md:py-8"
-        style={{
-          scrollbarWidth: "thin",
-          scrollbarColor: "#e5e7eb rgba(15,23,42,0.75)",
-        }}
-      >
-        <div className="space-y-6 text-gray-300 leading-relaxed text-sm md:text-base">
-          {/* Intro */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
+     {/* BODY */}
+     <div
+            className="flex-1 overflow-y-auto px-6 md:px-8 py-6 md:py-8"
+            style={{
+              scrollbarWidth: "thin",
+              scrollbarColor: "#e5e7eb rgba(15,23,42,0.75)",
+            }}
           >
-            <p>
-              At Locked&apos;n, we are committed to protecting your privacy and
-              being transparent about how we collect, use, and protect your
-              personal information. This Privacy Policy explains our data
-              practices in detail.
-            </p>
-          </section>
-
-          {/* 1. Information We Collect */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              1. Information We Collect
-            </h3>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-2">
-              1.1 Information You Provide
-            </h4>
-            <ul className="list-disc list-inside ml-4 space-y-2">
-              <li>
-                <strong>Account Information:</strong> Name, email address, age,
-                gender, fitness level, and goals
-              </li>
-              <li>
-                <strong>Profile Data:</strong> Height, weight, fitness
-                preferences, and workout history
-              </li>
-              <li>
-                <strong>Payment Information:</strong> Billing details processed
-                securely through third-party payment processors (we do not store
-                full credit card numbers)
-              </li>
-              <li>
-                <strong>Communications:</strong> Messages you send to our
-                support team or feedback you provide
-              </li>
-            </ul>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
-              1.2 Information Collected Automatically
-            </h4>
-            <ul className="list-disc list-inside ml-4 space-y-2">
-              <li>
-                <strong>Workout Data:</strong> Exercise types, repetitions,
-                sets, duration, and form feedback
-              </li>
-              <li>
-                <strong>Device Information:</strong> Device type, operating
-                system, app version, and unique device identifiers
-              </li>
-              <li>
-                <strong>Usage Data:</strong> Features used, time spent in app,
-                and interaction patterns
-              </li>
-              <li>
-                <strong>Performance Data:</strong> App crashes, errors, and
-                technical diagnostics
-              </li>
-            </ul>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
-              1.3 Camera and Video Data
-            </h4>
-            <div className="bg-cyan-900/20 p-4 rounded-lg border border-cyan-500/30 my-3">
-              <p className="font-semibold text-cyan-400 mb-2">
-                🔒 Your Privacy is Protected
-              </p>
-              <p>
-                Locked&apos;n processes all video data{" "}
-                <strong>locally on your device</strong> in real-time for AI pose
-                detection and form analysis. We do NOT record, store, or
-                transmit any video footage to our servers unless you explicitly
-                choose to save and share specific workout recordings through our
-                optional community features.
-              </p>
+            <div className="space-y-6 text-gray-300 leading-relaxed text-sm md:text-base">
+              {/* Intro */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <p>
+                  At Locked&apos;n, we are committed to protecting your privacy
+                  and being transparent about how we collect, use, and protect
+                  your personal information. This Privacy Policy explains our data
+                  practices when you use our app and website.
+                </p>
+              </section>
+  
+              {/* 1. Info we collect */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  1. Information We Collect
+                </h2>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-2">
+                  1.1 Information You Provide
+                </h3>
+                <ul className="list-disc list-inside ml-4 space-y-2">
+                  <li>
+                    <strong>Account information:</strong> Name, email address,
+                    age, and basic profile details you provide when creating your
+                    account.
+                  </li>
+                  <li>
+                    <strong>Profile data:</strong> Fitness level, goals, height,
+                    weight, and other optional fitness details that help us
+                    personalize your experience.
+                  </li>
+                  <li>
+                    <strong>Payment information:</strong> Subscription and billing
+                    details processed securely by third‑party payment providers
+                    (we do not store full card numbers).
+                  </li>
+                  <li>
+                    <strong>Support &amp; feedback:</strong> Information you share
+                    when you contact us for help, give feedback, or respond to
+                    surveys.
+                  </li>
+                </ul>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
+                  1.2 Information Collected Automatically
+                </h3>
+                <ul className="list-disc list-inside ml-4 space-y-2">
+                  <li>
+                    <strong>Workout data:</strong> Exercise type, reps, sets,
+                    duration, and performance statistics generated while you use
+                    the app.
+                  </li>
+                  <li>
+                    <strong>Device information:</strong> Device model, operating
+                    system, app version, language, and unique device identifiers.
+                  </li>
+                  <li>
+                    <strong>Usage information:</strong> Features you use, screens
+                    you view, and general interaction patterns that help us
+                    improve the app.
+                  </li>
+                  <li>
+                    <strong>Diagnostics:</strong> Crash logs and performance data
+                    to detect and fix technical issues.
+                  </li>
+                </ul>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
+                  1.3 Camera and Video Data
+                </h3>
+                <div className="bg-cyan-900/20 p-4 rounded-lg border border-cyan-500/30 my-3">
+                  <p className="font-semibold text-cyan-400 mb-1">
+                    🔒 Real‑time only, processed on your device
+                  </p>
+                  <p>
+                    Locked&apos;n uses your device&apos;s camera to analyze your
+                    exercise form with AI. Video data is processed locally on your
+                    device in real‑time and is not stored or uploaded to our
+                    servers unless you explicitly choose to save or share
+                    recordings through optional features.
+                  </p>
+                </div>
+              </section>
+  
+              {/* 2. How we use info */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  2. How We Use Your Information
+                </h2>
+                <p className="mb-3">
+                  We use the information we collect for the following purposes:
+                </p>
+                <ul className="list-disc list-inside ml-4 space-y-2">
+                  <li>
+                    <strong>Provide and improve the service:</strong> Deliver
+                    AI‑powered form analysis, rep counting, workout tracking, and
+                    personalized recommendations.
+                  </li>
+                  <li>
+                    <strong>Account management:</strong> Create and manage your
+                    account, process subscriptions, and handle billing.
+                  </li>
+                  <li>
+                    <strong>Personalization:</strong> Tailor workouts, goals, and
+                    content to your preferences and performance over time.
+                  </li>
+                  <li>
+                    <strong>Analytics and performance:</strong> Understand how the
+                    app is used so we can improve features and stability.
+                  </li>
+                  <li>
+                    <strong>Communication:</strong> Send important notices,
+                    updates, and information related to your account or
+                    subscription. You can opt out of marketing emails at any time.
+                  </li>
+                  <li>
+                    <strong>Security and fraud prevention:</strong> Detect,
+                    investigate, and prevent misuse, fraud, or security issues.
+                  </li>
+                  <li>
+                    <strong>Legal compliance:</strong> Comply with legal
+                    obligations and enforce our Terms of Service.
+                  </li>
+                </ul>
+              </section>
+  
+              {/* 3. Data storage & security */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  3. Data Storage and Security
+                </h2>
+                <p className="mb-3">
+                  We take appropriate technical and organizational measures to
+                  protect your personal information:
+                </p>
+                <ul className="list-disc list-inside ml-4 space-y-2 mb-3">
+                  <li>
+                    <strong>Encryption in transit:</strong> Data sent between your
+                    device and our servers is encrypted using modern TLS/SSL
+                    protocols.
+                  </li>
+                  <li>
+                    <strong>Secure storage:</strong> Account and subscription data
+                    is stored on secure infrastructure with restricted access.
+                  </li>
+                  <li>
+                    <strong>Access controls:</strong> Only authorized personnel
+                    can access personal data, and only when necessary.
+                  </li>
+                  <li>
+                    <strong>Local video processing:</strong> Workout video is
+                    processed on your device to reduce exposure of sensitive
+                    information.
+                  </li>
+                </ul>
+                <p className="text-xs md:text-sm text-yellow-400">
+                  While we work hard to protect your information, no method of
+                  transmission or storage is 100% secure. You are responsible for
+                  keeping your device and account credentials safe.
+                </p>
+              </section>
+  
+              {/* 4. Sharing & disclosure */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  4. How We Share Your Information
+                </h2>
+                <p className="mb-3">
+                  We do <span className="font-semibold">not</span> sell your
+                  personal information. We may share data only in these cases:
+                </p>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2">
+                  4.1 Service Providers
+                </h3>
+                <p className="mb-2">
+                  We work with trusted third‑party providers to help us operate
+                  and improve Locked&apos;n, such as:
+                </p>
+                <ul className="list-disc list-inside ml-4 space-y-1 mb-3">
+                  <li>Cloud hosting and database providers</li>
+                  <li>Payment processors and subscription platforms</li>
+                  <li>Customer support and analytics tools</li>
+                </ul>
+                <p className="text-sm mb-3">
+                  These providers may process personal data on our behalf and are
+                  contractually required to protect it and use it only for the
+                  services they provide to us.
+                </p>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2">
+                  4.2 Legal Requirements
+                </h3>
+                <p className="mb-3">
+                  We may disclose your information if required by law, regulation,
+                  legal process, or government request, or when we believe it is
+                  necessary to:
+                </p>
+                <ul className="list-disc list-inside ml-4 space-y-1 mb-3">
+                  <li>Comply with a legal obligation</li>
+                  <li>
+                    Protect the rights, property, or safety of Locked&apos;n, our
+                    users, or the public
+                  </li>
+                  <li>Detect and address fraud, security, or technical issues</li>
+                </ul>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2">
+                  4.3 Business Transfers
+                </h3>
+                <p className="mb-3">
+                  If we are involved in a merger, acquisition, or sale of assets,
+                  your information may be transferred as part of that deal. We
+                  will notify you of any such change and any choices you may have.
+                </p>
+  
+                <h3 className="text-base md:text-lg font-semibold text-cyan-300 mb-2">
+                  4.4 With Your Consent
+                </h3>
+                <p>
+                  We may share your information for any other purpose disclosed to
+                  you at the time of collection, with your consent or direction
+                  (for example, when you share progress to social media).
+                </p>
+              </section>
+  
+              {/* 5. Your rights & choices */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  5. Your Rights and Choices
+                </h2>
+                <p className="mb-3">
+                  Depending on your location, you may have some or all of the
+                  rights below regarding your personal information:
+                </p>
+                <ul className="space-y-3 ml-4">
+                  <li>
+                    <strong className="text-cyan-300">Access:</strong> Request a
+                    copy of the personal information we hold about you.
+                  </li>
+                  <li>
+                    <strong className="text-cyan-300">Correction:</strong> Ask us
+                    to correct inaccurate or incomplete information.
+                  </li>
+                  <li>
+                    <strong className="text-cyan-300">Deletion:</strong> Request
+                    deletion of your data, subject to certain legal exceptions.
+                  </li>
+                  <li>
+                    <strong className="text-cyan-300">Portability:</strong>{" "}
+                    Request your data in a structured, commonly used,
+                    machine‑readable format where technically feasible.
+                  </li>
+                  <li>
+                    <strong className="text-cyan-300">Restriction/Object:</strong>{" "}
+                    In some cases, request that we restrict or stop certain
+                    processing activities.
+                  </li>
+                  <li>
+                    <strong className="text-cyan-300">Marketing:</strong> Opt out
+                    of marketing emails by clicking the unsubscribe link or
+                    updating your preferences.
+                  </li>
+                </ul>
+                <p className="mt-4">
+                  To exercise these rights, contact us at{" "}
+                  <span className="text-cyan-400">lockedn.app@gmail.com</span>.
+                  We may need to verify your identity before responding.
+                </p>
+              </section>
+  
+              {/* 6. Data retention */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  6. Data Retention
+                </h2>
+                <p className="mb-3">
+                  We keep your personal information only as long as necessary to:
+                </p>
+                <ul className="list-disc list-inside ml-4 space-y-2 mb-3">
+                  <li>Provide and maintain your account and our services</li>
+                  <li>Comply with legal, tax, and accounting obligations</li>
+                  <li>Resolve disputes and enforce our agreements</li>
+                </ul>
+                <p>
+                  When your data is no longer needed, we will delete or anonymize
+                  it in line with our data retention policies, unless a longer
+                  retention period is required or permitted by law.
+                </p>
+              </section>
+  
+              {/* 7. Children's privacy */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  7. Children&apos;s Privacy
+                </h2>
+                <p>
+                  Locked&apos;n is not intended for children under the age of 13
+                  (or the minimum age of digital consent in your country). We do
+                  not knowingly collect personal information from children. If we
+                  learn that we have collected data from a child without verifiable
+                  parental consent, we will delete it as soon as possible.
+                </p>
+                <p className="mt-3">
+                  If you believe a child has provided us with personal information,
+                  please contact us at{" "}
+                  <span className="text-cyan-400">lockedn.app@gmail.com</span>.
+                </p>
+              </section>
+  
+              {/* 8. International transfers */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  8. International Data Transfers
+                </h2>
+                <p>
+                  We may process and store your information in countries other
+                  than where you live. These countries may have data protection
+                  laws that are different from those in your country. When we
+                  transfer data, we take steps to ensure it receives an adequate
+                  level of protection in line with this Privacy Policy and
+                  applicable laws.
+                </p>
+              </section>
+  
+              {/* 9. Third‑party links */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  9. Third‑Party Services and Links
+                </h2>
+                <p>
+                  Our app and website may contain links to third‑party websites or
+                  services (such as social media platforms, payment providers, or
+                  health integrations). We are not responsible for the privacy
+                  practices of those third parties. We encourage you to read their
+                  privacy policies before providing any personal information.
+                </p>
+              </section>
+  
+              {/* 10. Changes to this policy */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  10. Changes to This Privacy Policy
+                </h2>
+                <p>
+                  We may update this Privacy Policy from time to time to reflect
+                  changes in our practices, technologies, or legal requirements.
+                  When we make material changes, we will notify you by updating
+                  the &quot;Last updated&quot; date and, where appropriate, by
+                  sending an email or showing an in‑app notification.
+                </p>
+                <p className="mt-3">
+                  Your continued use of Locked&apos;n after any changes to this
+                  policy means you accept the updated version.
+                </p>
+              </section>
+  
+              {/* 11. Contact us */}
+              <section className="border border-white/5 rounded-2xl bg-slate-900/40 px-4 py-4 md:px-6 md:py-5 shadow-[0_0_12px_rgba(0,0,0,0.55)]">
+                <h2 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
+                  11. Contact Us
+                </h2>
+                <p className="mb-3">
+                  If you have any questions, concerns, or requests regarding this
+                  Privacy Policy or how we handle your data, please contact us:
+                </p>
+                <div className="bg-slate-950/60 p-4 rounded-xl border border-white/10">
+                  <p className="text-slate-300 text-sm">
+                    Email: lockedn.app@gmail.com
+                  </p>
+                  <p className="text-slate-300 text-sm">
+                    Response time: within 48 hours
+                  </p>
+                </div>
+              </section>
+  
+              {/* Footer note */}
+              <section className="border-t border-white/10 pt-5 mt-4 text-sm text-slate-300">
+                <p>
+                  By using Locked&apos;n, you acknowledge that you have read and
+                  understood this Privacy Policy. We are committed to protecting
+                  your data and giving you a transparent, privacy‑first fitness
+                  experience.
+                </p>
+                <p className="text-cyan-300 mt-3 font-semibold">
+                  Thank you for trusting Locked&apos;n with your fitness journey! 💪
+                </p>
+              </section>
             </div>
-          </section>
-
-          {/* 2. How We Use Your Information */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              2. How We Use Your Information
-            </h3>
-            <p className="mb-3">
-              We use the collected information for the following purposes:
-            </p>
-            <ul className="list-disc list-inside ml-4 space-y-2">
-              <li>
-                <strong>Service Delivery:</strong> Provide AI-powered form
-                analysis, rep counting, and personalized workout
-                recommendations
-              </li>
-              <li>
-                <strong>Account Management:</strong> Create and manage your
-                account, process subscriptions, and provide customer support
-              </li>
-              <li>
-                <strong>Improvement:</strong> Analyze usage patterns to improve
-                our AI algorithms, features, and user experience
-              </li>
-              <li>
-                <strong>Communication:</strong> Send you important updates,
-                workout reminders, and promotional content (you can opt out
-                anytime)
-              </li>
-              <li>
-                <strong>Safety:</strong> Detect and prevent fraud, abuse, and
-                security issues
-              </li>
-              <li>
-                <strong>Legal Compliance:</strong> Comply with legal obligations
-                and enforce our Terms of Service
-              </li>
-            </ul>
-          </section>
-
-          {/* 3. Data Storage and Security */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              3. Data Storage and Security
-            </h3>
-            <p className="mb-3">
-              We implement industry-standard security measures to protect your
-              personal information:
-            </p>
-            <ul className="list-disc list-inside ml-4 space-y-2 mb-3">
-              <li>
-                <strong>Encryption:</strong> All data transmitted between your
-                device and our servers is encrypted using TLS/SSL protocols
-              </li>
-              <li>
-                <strong>Secure Storage:</strong> Your data is stored on secure
-                cloud servers with encryption at rest
-              </li>
-              <li>
-                <strong>Access Controls:</strong> Strict access controls limit
-                who can view your personal information
-              </li>
-              <li>
-                <strong>Regular Audits:</strong> We conduct regular security
-                audits and vulnerability assessments
-              </li>
-              <li>
-                <strong>Local Processing:</strong> Video analysis happens
-                entirely on your device, minimizing data transmission
-              </li>
-            </ul>
-            <p className="text-xs md:text-sm text-yellow-400">
-              Note: While we implement strong security measures, no method of
-              transmission over the internet is 100% secure. We cannot guarantee
-              absolute security.
-            </p>
-          </section>
-
-          {/* 4. Data Sharing and Disclosure */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              4. Data Sharing and Disclosure
-            </h3>
-            <p className="mb-3">
-              We respect your privacy and do not sell your personal
-              information. We may share your data only in the following
-              circumstances:
-            </p>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-2">
-              4.1 Service Providers
-            </h4>
-            <p className="mb-2">
-              We work with trusted third-party service providers who help us
-              operate our service:
-            </p>
-            <ul className="list-disc list-inside ml-4 space-y-1 mb-3">
-              <li>Cloud hosting providers (e.g., AWS, Google Cloud)</li>
-              <li>Payment processors (e.g., Stripe, PayPal)</li>
-              <li>Analytics services (e.g., Google Analytics)</li>
-              <li>Customer support tools</li>
-            </ul>
-            <p className="text-sm">
-              These providers are contractually obligated to protect your data
-              and use it only for the purposes we specify.
-            </p>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
-              4.2 Legal Requirements
-            </h4>
-            <p>
-              We may disclose your information if required by law, court order,
-              or government regulation, or if we believe disclosure is
-              necessary to:
-            </p>
-            <ul className="list-disc list-inside ml-4 space-y-1 mt-2">
-              <li>Comply with legal obligations</li>
-              <li>Protect our rights, property, or safety</li>
-              <li>Prevent fraud or illegal activity</li>
-              <li>Protect the safety of our users or the public</li>
-            </ul>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
-              4.3 Business Transfers
-            </h4>
-            <p>
-              If Locked&apos;n is involved in a merger, acquisition, or sale of
-              assets, your information may be transferred as part of that
-              transaction. We will notify you of any such change.
-            </p>
-
-            <h4 className="text-base md:text-lg font-semibold text-cyan-300 mb-2 mt-4">
-              4.4 With Your Consent
-            </h4>
-            <p>
-              If you choose to share your workout results, progress photos, or
-              achievements through our community features or social media
-              integrations, this content will be visible to other users or the
-              public as you direct.
-            </p>
-          </section>
-
-          {/* 5. Your Rights and Choices */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              5. Your Rights and Choices
-            </h3>
-            <p className="mb-3">
-              You have the following rights regarding your personal information:
-            </p>
-
-            <ul className="space-y-3 ml-4">
-              <li>
-                <strong className="text-cyan-300">Access:</strong> Request a
-                copy of the personal information we hold about you
-              </li>
-              <li>
-                <strong className="text-cyan-300">Correction:</strong> Request
-                correction of inaccurate or incomplete information
-              </li>
-              <li>
-                <strong className="text-cyan-300">Deletion:</strong> Request
-                deletion of your account and associated data (some data may be
-                retained for legal or legitimate business purposes)
-              </li>
-              <li>
-                <strong className="text-cyan-300">Portability:</strong> Request
-                a copy of your data in a structured, machine-readable format
-              </li>
-              <li>
-                <strong className="text-cyan-300">Opt-Out:</strong> Unsubscribe
-                from marketing emails at any time by clicking the unsubscribe
-                link
-              </li>
-              <li>
-                <strong className="text-cyan-300">Camera Access:</strong> Revoke
-                camera permissions through your device settings (note: this will
-                limit app functionality)
-              </li>
-            </ul>
-
-            <p className="mt-4">
-              To exercise any of these rights, please contact us at{" "}
-              <span className="text-cyan-400">lockedn.app@gmail.com</span>
-            </p>
-          </section>
-
-          {/* 6. Data Retention */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              6. Data Retention
-            </h3>
-            <p className="mb-3">
-              We retain your personal information for as long as necessary to
-              provide our services and fulfill the purposes outlined in this
-              policy:
-            </p>
-            <ul className="list-disc list-inside ml-4 space-y-2">
-              <li>
-                <strong>Active Accounts:</strong> We retain your data while your
-                account is active
-              </li>
-              <li>
-                <strong>Deleted Accounts:</strong> After account deletion, most
-                data is removed within 30 days. Some information may be retained
-                longer for legal compliance, fraud prevention, or dispute
-                resolution
-              </li>
-              <li>
-                <strong>Workout Data:</strong> Historical workout data is
-                retained to provide you with progress tracking and insights
-              </li>
-              <li>
-                <strong>Legal Requirements:</strong> Some data may be retained
-                longer if required by law or for legitimate business purposes
-              </li>
-            </ul>
-          </section>
-
-          {/* 7. Children's Privacy */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              7. Children&apos;s Privacy
-            </h3>
-            <p>
-              Locked&apos;n is not intended for users under the age of 13 (or
-              the applicable age of digital consent in your country). We do not
-              knowingly collect personal information from children. If we become
-              aware that we have collected information from a child without
-              parental consent, we will take steps to delete that information
-              promptly.
-            </p>
-            <p className="mt-3">
-              If you are a parent or guardian and believe your child has
-              provided us with personal information, please contact us at{" "}
-              <span className="text-cyan-400">lockedn.app@gmail.com</span>.
-            </p>
-          </section>
-
-          {/* 8. International Data Transfers */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              8. International Data Transfers
-            </h3>
-            <p>
-              Locked&apos;n operates globally, and your information may be
-              transferred to and processed in countries other than your country
-              of residence. These countries may have different data protection
-              laws. When we transfer your data internationally, we implement
-              appropriate safeguards to protect your information in accordance
-              with this Privacy Policy.
-            </p>
-          </section>
-
-          {/* 9. Third‑Party Links and Services */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              9. Third-Party Links and Services
-            </h3>
-            <p>
-              Our app and website may contain links to third-party websites and
-              services (such as social media platforms, payment processors, or
-              health apps). This Privacy Policy does not apply to those third
-              parties. We encourage you to review the privacy policies of any
-              third-party services you use.
-            </p>
-            <p className="mt-3">
-              When you click links to third-party sites like Instagram, TikTok,
-              or YouTube, those platforms may use their own cookies and tracking
-              technologies in accordance with their privacy policies.
-            </p>
-          </section>
-
-          {/* 10. Changes to this Privacy Policy */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              10. Changes to This Privacy Policy
-            </h3>
-            <p>
-              We may update this Privacy Policy from time to time to reflect
-              changes in our practices, technology, or legal requirements. We
-              will notify you of significant changes by:
-            </p>
-            <ul className="list-disc list-inside ml-4 space-y-1 mt-2">
-              <li>Posting the updated policy on our website and in the app</li>
-              <li>Sending you an email notification</li>
-              <li>Displaying an in-app notification</li>
-            </ul>
-            <p className="mt-3">
-              The &quot;Last updated&quot; date at the top of this policy
-              indicates when it was last revised. Your continued use of
-              Locked&apos;n after changes are made constitutes acceptance of the
-              updated policy.
-            </p>
-          </section>
-
-          {/* 11. Contact Us */}
-          <section
-            className="border border-white/5 rounded-2xl bg-slate-900/40
-                       px-4 py-4 md:px-6 md:py-5
-                       shadow-[0_0_12px_rgba(0,0,0,0.55)]"
-          >
-            <h3 className="text-xl md:text-2xl font-bold text-cyan-400 mb-3">
-              11. Contact Us
-            </h3>
-            <p className="mb-3">
-              If you have questions, concerns, or requests regarding this
-              Privacy Policy or our data practices, please contact us:
-            </p>
-            <div className="bg-slate-950/60 p-4 rounded-xl border border-white/10">
-              <p className="text-slate-300 text-sm">
-                Email: lockedn.app@gmail.com
-              </p>
-              <p className="text-slate-300 text-sm">
-                Response time: within 48 hours
-              </p>
-            </div>
-          </section>
-
-          {/* Footer */}
-          <section className="border-t border-white/10 pt-5 mt-4 text-sm text-slate-300">
-            <p>
-              By using Locked&apos;n, you acknowledge that you have read and
-              understood this Privacy Policy. We are committed to protecting
-              your privacy and earning your trust.
-            </p>
-            <p className="text-cyan-300 mt-3 font-semibold">
-              Thank you for trusting Locked&apos;n with your fitness journey! 💪
-            </p>
-          </section>
+          </div>
         </div>
-      </div>
-    </div>
   </div>
 );
 
@@ -2560,7 +2497,7 @@ className="flex items-start gap-3 bg-gray-800/30 backdrop-blur-sm p-4 rounded-xl
                   target="_blank"
                   rel="noopener noreferrer"
                   href="https://www.tiktok.com/@lockedn.app"
-                  className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-teal-600 hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50 transition-all duration-300"
+                  className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-cyan-600 hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50 transition-all duration-300"
                 >
                   <svg
                     className="w-5 h-5"
