@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -30,7 +31,6 @@ icons: {
 
 };
 
-
 export default function RootLayout({
   children,
 }: {
@@ -38,8 +38,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body>
         {children}
+        {/* 👇 This actually sends pageview data to Vercel */}
         <Analytics />
       </body>
     </html>
