@@ -7,66 +7,53 @@ type Status = "idle" | "loading" | "running" | "error";
 type PushupPhase = "no_plank" | "top" | "descending" | "bottom" | "ascending";
 
 const MODEL_PATH = "/models/pose_landmarker_lite.task";
-const WASM_PATH =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
-
+const WASM_PATH  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 const DETECTION_INTERVAL_MS = 66; // ~15 FPS
 
-// ── Pushup thresholds ──────────────────────────────────────────────
-const TOP_ELBOW_ANGLE    = 150;   // arms extended at top
-const BOTTOM_ELBOW_ANGLE = 95;    // arms bent at bottom
-const BODY_STRAIGHT_MIN  = 145;   // shoulder-hip-ankle must be > this
-const MIN_REP_MS         = 700;   // debounce between counted reps
-const VIS_MIN            = 0.45;  // minimum landmark visibility
+// ── Elbow thresholds ───────────────────────────────────────────────
+const TOP_ELBOW_ANGLE    = 150;  // arms locked out at top
+const BOTTOM_ELBOW_ANGLE = 95;   // arms bent at bottom
+const MIN_REP_MS         = 700;  // debounce between counted reps
 
-// ── Plank detection ────────────────────────────────────────────────
-// In a plank (side view), shoulder and hip are at roughly the same
-// Y coordinate (both near the top of the frame when lying down).
-// When standing, shoulder Y is much smaller (higher on screen) than hip Y.
-// We measure the VERTICAL distance between shoulder and hip, normalised
-// by body height (shoulder-to-ankle distance).
-// Ratio < PLANK_RATIO_MAX  → person is roughly horizontal → plank OK.
-// We also check that the body isn't nearly vertical (standing).
-const PLANK_V_RATIO_MAX = 0.30;  // shoulder-hip vertical gap / body height
+// ── Plank ENTRY gate (body angle) ─────────────────────────────────
+// Only checked once to unlock the state machine.
+// Your natural plank with slight arch = ~165-180°. We accept that.
+const PLANK_BODY_MIN = 165;   // must be at least this straight to enter
+const PLANK_BODY_MAX = 180;   // (cap, always true for angle measurement)
 
-// MediaPipe landmark indices
+// ── Plank EXIT condition ───────────────────────────────────────────
+// If body angle crashes below this you clearly stood up → re-lock.
+// Set low enough that mid-rep wobble (165 → 158) never triggers it.
+const STAND_UP_BODY_ANGLE = 120;
+
+// ── Visibility floor ───────────────────────────────────────────────
+const VIS_MIN = 0.45;
+
+// ── MediaPipe landmark indices ─────────────────────────────────────
 const LM = {
-  LEFT_SHOULDER:  11,
-  RIGHT_SHOULDER: 12,
-  LEFT_ELBOW:     13,
-  RIGHT_ELBOW:    14,
-  LEFT_WRIST:     15,
-  RIGHT_WRIST:    16,
-  LEFT_HIP:       23,
-  RIGHT_HIP:      24,
-  LEFT_KNEE:      25,
-  RIGHT_KNEE:     26,
-  LEFT_ANKLE:     27,
-  RIGHT_ANKLE:    28,
+  LEFT_SHOULDER:  11, RIGHT_SHOULDER: 12,
+  LEFT_ELBOW:     13, RIGHT_ELBOW:    14,
+  LEFT_WRIST:     15, RIGHT_WRIST:    16,
+  LEFT_HIP:       23, RIGHT_HIP:      24,
+  LEFT_KNEE:      25, RIGHT_KNEE:     26,
+  LEFT_ANKLE:     27, RIGHT_ANKLE:    28,
 };
 
 type Landmark = { x: number; y: number; z: number; visibility?: number };
 
-function vis(lm: Landmark): number {
-  return lm.visibility ?? 1;
-}
+function vis(lm: Landmark): number { return lm.visibility ?? 1; }
 
 function angleDeg(a: Landmark, b: Landmark, c: Landmark): number {
   const ab = { x: a.x - b.x, y: a.y - b.y };
   const cb = { x: c.x - b.x, y: c.y - b.y };
   const dot = ab.x * cb.x + ab.y * cb.y;
-  const mag =
-    Math.sqrt(ab.x ** 2 + ab.y ** 2) * Math.sqrt(cb.x ** 2 + cb.y ** 2);
+  const mag = Math.sqrt(ab.x ** 2 + ab.y ** 2) * Math.sqrt(cb.x ** 2 + cb.y ** 2);
   if (mag === 0) return 0;
   return (Math.acos(Math.max(-1, Math.min(1, dot / mag))) * 180) / Math.PI;
 }
 
-// ── Pick whichever side has better visibility ──────────────────────
-function getBestSide(lms: Landmark[]): {
-  shoulder: Landmark; elbow: Landmark; wrist: Landmark;
-  hip: Landmark; knee: Landmark; ankle: Landmark;
-  visScore: number;
-} {
+// Auto-pick whichever side faces the camera (higher visibility score)
+function getBestSide(lms: Landmark[]) {
   const pick = (side: "L" | "R") => {
     const s = side === "L" ? lms[LM.LEFT_SHOULDER]  : lms[LM.RIGHT_SHOULDER];
     const e = side === "L" ? lms[LM.LEFT_ELBOW]     : lms[LM.RIGHT_ELBOW];
@@ -74,77 +61,45 @@ function getBestSide(lms: Landmark[]): {
     const h = side === "L" ? lms[LM.LEFT_HIP]       : lms[LM.RIGHT_HIP];
     const k = side === "L" ? lms[LM.LEFT_KNEE]      : lms[LM.RIGHT_KNEE];
     const a = side === "L" ? lms[LM.LEFT_ANKLE]     : lms[LM.RIGHT_ANKLE];
-    const score = vis(s) + vis(e) + vis(w) + vis(h) + vis(k) + vis(a);
-    return { shoulder: s, elbow: e, wrist: w, hip: h, knee: k, ankle: a, visScore: score };
+    return { shoulder: s, elbow: e, wrist: w, hip: h, knee: k, ankle: a,
+             visScore: vis(s) + vis(e) + vis(w) + vis(h) + vis(k) + vis(a) };
   };
-  const L = pick("L");
-  const R = pick("R");
+  const L = pick("L"), R = pick("R");
   return L.visScore >= R.visScore ? L : R;
-}
-
-// ── Plank check: is the person lying roughly horizontal? ───────────
-// Uses the BEST side's shoulder and ankle to estimate body height,
-// then checks that shoulder and hip are close vertically.
-function isInPlankPosition(lms: Landmark[]): { ok: boolean; reason: string } {
-  const { shoulder, hip, ankle, visScore } = getBestSide(lms);
-
-  // Require at least shoulder + hip + ankle to be visible
-  if (visScore / 6 < VIS_MIN) {
-    return { ok: false, reason: "⚠️ Body not fully visible" };
-  }
-
-  // Body height in normalised coords (shoulder Y to ankle Y when standing).
-  // Y increases downward in MediaPipe coords.
-  const bodyHeight = Math.abs(ankle.y - shoulder.y);
-
-  // If body height is tiny, something is off (maybe only torso in frame).
-  if (bodyHeight < 0.1) {
-    return { ok: false, reason: "⚠️ Move further back — full body needed" };
-  }
-
-  // Vertical gap between shoulder and hip, normalised by body height.
-  // When standing: shoulder is HIGH (small Y), hip is LOWER (larger Y) → large ratio.
-  // When in plank (side view): both are close in Y → small ratio.
-  const vGap = Math.abs(hip.y - shoulder.y) / bodyHeight;
-
-  if (vGap > PLANK_V_RATIO_MAX) {
-    return { ok: false, reason: "⚠️ Get into plank position" };
-  }
-
-  return { ok: true, reason: "" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PoseTestClient() {
-  const videoRef    = useRef<HTMLVideoElement | null>(null);
-  const canvasRef   = useRef<HTMLCanvasElement | null>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
+  const videoRef      = useRef<HTMLVideoElement | null>(null);
+  const canvasRef     = useRef<HTMLCanvasElement | null>(null);
+  const streamRef     = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<PoseLandmarkerType | null>(null);
-  const rafRef      = useRef<number | null>(null);
+  const rafRef        = useRef<number | null>(null);
 
-  const runningRef      = useRef(false);
-  const lastDetectRef   = useRef(0);
-  const fpsCntRef       = useRef(0);
-  const lastFpsRef      = useRef(performance.now());
+  const runningRef    = useRef(false);
+  const lastDetectRef = useRef(0);
+  const fpsCntRef     = useRef(0);
+  const lastFpsRef    = useRef(performance.now());
 
-  // State machine refs (avoid stale closures in rAF loop)
-  const phaseRef        = useRef<PushupPhase>("no_plank");
-  const repCountRef     = useRef(0);
-  const lastRepRef      = useRef(0);
+  // ── State machine (refs = no stale closures in rAF) ───────────────
+  const phaseRef      = useRef<PushupPhase>("no_plank");
+  const unlockedRef   = useRef(false);   // true once plank gate passed
+  const repCountRef   = useRef(0);
+  const lastRepRef    = useRef(0);
 
-  const [status,      setStatus]      = useState<Status>("idle");
-  const [message,     setMessage]     = useState("Click Start to begin.");
-  const [fps,         setFps]         = useState(0);
-  const [landmarks,   setLandmarks]   = useState(0);
-  const [repCount,    setRepCount]    = useState(0);
-  const [phase,       setPhase]       = useState<PushupPhase>("no_plank");
-  const [feedback,    setFeedback]    = useState("");
-  const [elbowAngle,  setElbowAngle]  = useState(0);
-  const [bodyAngle,   setBodyAngle]   = useState(0);
-  const [plankRatio,  setPlankRatio]  = useState(0); // for debug
+  const [status,     setStatus]     = useState<Status>("idle");
+  const [message,    setMessage]    = useState("Click Start to begin.");
+  const [fps,        setFps]        = useState(0);
+  const [landmarks,  setLandmarks]  = useState(0);
+  const [repCount,   setRepCount]   = useState(0);
+  const [phase,      setPhase]      = useState<PushupPhase>("no_plank");
+  const [feedback,   setFeedback]   = useState("");
+  const [elbowAngle, setElbowAngle] = useState(0);
+  const [bodyAngle,  setBodyAngle]  = useState(0);
+  const [unlocked,   setUnlocked]   = useState(false);
 
-  // ── MediaPipe setup ──────────────────────────────────────────────
+  // ── MediaPipe ─────────────────────────────────────────────────────
   async function createLandmarker() {
     const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
     const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
@@ -157,17 +112,12 @@ export default function PoseTestClient() {
       minTrackingConfidence:      0.5,
       outputSegmentationMasks: false,
     };
-    try {
-      return await PoseLandmarker.createFromOptions(vision, opts);
-    } catch {
-      return await PoseLandmarker.createFromOptions(vision, {
-        ...opts,
-        baseOptions: { modelAssetPath: MODEL_PATH, delegate: "CPU" as const },
-      });
-    }
+    try   { return await PoseLandmarker.createFromOptions(vision, opts); }
+    catch { return await PoseLandmarker.createFromOptions(vision,
+              { ...opts, baseOptions: { modelAssetPath: MODEL_PATH, delegate: "CPU" as const } }); }
   }
 
-  // ── Start ────────────────────────────────────────────────────────
+  // ── Start / Stop / Reset ─────────────────────────────────────────
   async function start() {
     try {
       setStatus("loading");
@@ -186,15 +136,14 @@ export default function PoseTestClient() {
       landmarkerRef.current = await createLandmarker();
 
       phaseRef.current    = "no_plank";
+      unlockedRef.current = false;
       repCountRef.current = 0;
       lastRepRef.current  = 0;
-      setRepCount(0);
-      setPhase("no_plank");
-      setFeedback("");
+      setRepCount(0); setPhase("no_plank"); setFeedback(""); setUnlocked(false);
 
       runningRef.current = true;
       setStatus("running");
-      setMessage("Get into plank/pushup position sideways to camera.");
+      setMessage("Get into plank position sideways to camera.");
       loop();
     } catch (err) {
       setStatus("error");
@@ -202,78 +151,85 @@ export default function PoseTestClient() {
     }
   }
 
-  // ── Stop ─────────────────────────────────────────────────────────
   function stop() {
     runningRef.current = false;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     streamRef.current?.getTracks().forEach((t) => t.stop());
     landmarkerRef.current?.close();
-    streamRef.current  = null;
-    landmarkerRef.current = null;
+    streamRef.current = null; landmarkerRef.current = null;
     const ctx = canvasRef.current?.getContext("2d");
-    if (ctx && canvasRef.current)
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     setStatus("idle"); setFps(0); setLandmarks(0);
-    setPhase("no_plank"); setFeedback(""); setMessage("Stopped.");
+    setPhase("no_plank"); setFeedback(""); setUnlocked(false); setMessage("Stopped.");
   }
 
   function resetCounter() {
     phaseRef.current    = "no_plank";
+    unlockedRef.current = false;
     repCountRef.current = 0;
     lastRepRef.current  = 0;
-    setRepCount(0); setPhase("no_plank"); setFeedback("");
+    setRepCount(0); setPhase("no_plank"); setFeedback(""); setUnlocked(false);
   }
 
-  // ── Main detection + state machine ──────────────────────────────
+  // ── Core pose processing ─────────────────────────────────────────
   function processPose(lms: Landmark[]) {
-    // ── 1. Plank gate ─────────────────────────────────────────────
-    const plankCheck = isInPlankPosition(lms);
-
-    // Compute best-side angles regardless (for the meters)
     const side = getBestSide(lms);
-    const eAngle = angleDeg(side.shoulder, side.elbow, side.wrist);
-    const bAngle = angleDeg(side.shoulder, side.hip, side.ankle);
 
-    // For the plank ratio display
-    const bodyH = Math.abs(side.ankle.y - side.shoulder.y);
-    const vGap  = bodyH > 0 ? Math.abs(side.hip.y - side.shoulder.y) / bodyH : 1;
-
-    setElbowAngle(Math.round(eAngle));
-    setBodyAngle(Math.round(bAngle));
-    setPlankRatio(Math.round(vGap * 100));
-
-    if (!plankCheck.ok) {
-      // Exit any active phase back to "no_plank"
-      if (phaseRef.current !== "no_plank") {
-        phaseRef.current = "no_plank";
-        setPhase("no_plank");
-      }
-      setFeedback(plankCheck.reason);
+    // Bail if landmarks are not visible enough
+    if (side.visScore / 6 < VIS_MIN) {
+      setFeedback("⚠️ Body not fully visible");
       return;
     }
 
-    // ── 2. Body straight check ────────────────────────────────────
-    const bodyIsStraight = bAngle >= BODY_STRAIGHT_MIN;
-    if (!bodyIsStraight) {
-      setFeedback("⚠️ Keep body straight — hips up!");
-    } else {
-      setFeedback("");
+    const eAngle = angleDeg(side.shoulder, side.elbow, side.wrist);
+    const bAngle = angleDeg(side.shoulder, side.hip, side.ankle);
+
+    setElbowAngle(Math.round(eAngle));
+    setBodyAngle(Math.round(bAngle));
+
+    // ── EXIT: if body angle collapses (clearly stood up) → re-lock ──
+    if (bAngle < STAND_UP_BODY_ANGLE) {
+      if (unlockedRef.current) {
+        unlockedRef.current = false;
+        setUnlocked(false);
+        phaseRef.current = "no_plank";
+        setPhase("no_plank");
+      }
+      setFeedback("⚠️ Get back into plank position");
+      return;
     }
 
-    const now = performance.now();
-    const prev = phaseRef.current;
+    // ── ENTRY gate: only checked while still locked ──────────────────
+    if (!unlockedRef.current) {
+      if (bAngle >= PLANK_BODY_MIN) {
+        // ✅ Good plank body angle → unlock
+        unlockedRef.current = true;
+        setUnlocked(true);
+        phaseRef.current = "top";   // assume top position to start
+        setPhase("top");
+        setFeedback("✅ Plank locked in — go!");
+      } else {
+        // Body not straight enough yet
+        setFeedback(`⚠️ Straighten body to ${PLANK_BODY_MIN}° (currently ${Math.round(bAngle)}°)`);
+      }
+      return; // don't run elbow machine until unlocked
+    }
 
-    // ── 3. State machine ──────────────────────────────────────────
+    // ── Elbow state machine (runs freely once unlocked) ──────────────
+    // Mid-rep body angle wobble is IGNORED here — gate already passed.
+    setFeedback(""); // clear any old feedback
+
+    const now = performance.now();
+
     switch (phaseRef.current) {
       case "no_plank":
-        // Just entered plank — wait for TOP position first
-        if (eAngle >= TOP_ELBOW_ANGLE) {
-          phaseRef.current = "top";
-          setPhase("top");
-        }
+        // Shouldn't reach here when unlocked, but safety:
+        phaseRef.current = "top";
+        setPhase("top");
         break;
 
       case "top":
+        // Detect start of descent
         if (eAngle < TOP_ELBOW_ANGLE - 15) {
           phaseRef.current = "descending";
           setPhase("descending");
@@ -282,17 +238,14 @@ export default function PoseTestClient() {
 
       case "descending":
         if (eAngle <= BOTTOM_ELBOW_ANGLE) {
-          if (bodyIsStraight) {
-            phaseRef.current = "bottom";
-            setPhase("bottom");
-          } else {
-            setFeedback("⚠️ Keep body straight — no-rep!");
-          }
-        }
-        // If they come back up without reaching bottom → back to top
-        if (eAngle >= TOP_ELBOW_ANGLE) {
+          // Reached the bottom
+          phaseRef.current = "bottom";
+          setPhase("bottom");
+        } else if (eAngle >= TOP_ELBOW_ANGLE) {
+          // Came back up without reaching bottom → back to top, no rep
           phaseRef.current = "top";
           setPhase("top");
+          setFeedback("⚠️ Go lower for it to count!");
         }
         break;
 
@@ -305,6 +258,7 @@ export default function PoseTestClient() {
 
       case "ascending":
         if (eAngle >= TOP_ELBOW_ANGLE) {
+          // Completed rep!
           if (now - lastRepRef.current >= MIN_REP_MS) {
             repCountRef.current += 1;
             lastRepRef.current = now;
@@ -312,9 +266,8 @@ export default function PoseTestClient() {
           }
           phaseRef.current = "top";
           setPhase("top");
-        }
-        // If they drop again without finishing → back to descending
-        if (eAngle <= BOTTOM_ELBOW_ANGLE) {
+        } else if (eAngle <= BOTTOM_ELBOW_ANGLE) {
+          // Dropped back down → back to bottom
           phaseRef.current = "bottom";
           setPhase("bottom");
         }
@@ -323,7 +276,7 @@ export default function PoseTestClient() {
   }
 
   // ── Draw skeleton ────────────────────────────────────────────────
-  function drawPose(lms: Landmark[], currentPhase: PushupPhase) {
+  function drawPose(lms: Landmark[], currentPhase: PushupPhase, isUnlocked: boolean) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -337,18 +290,19 @@ export default function PoseTestClient() {
       [23,25],[25,27],[24,26],[26,28],
     ];
 
-    const colors: Record<PushupPhase, string> = {
-      no_plank:   "#555555",
+    // Grey when not in plank, coloured by phase once unlocked
+    const phaseColors: Record<PushupPhase, string> = {
+      no_plank:   "#444444",
       top:        "#00ff88",
       descending: "#ffcc00",
       bottom:     "#ff6644",
       ascending:  "#44aaff",
     };
-    const color = colors[currentPhase];
+    const color = isUnlocked ? phaseColors[currentPhase] : "#444444";
 
-    ctx.lineWidth = 5;
+    ctx.lineWidth   = 5;
     ctx.strokeStyle = color;
-    ctx.fillStyle   = "#ffffff";
+    ctx.fillStyle   = isUnlocked ? "#ffffff" : "#888888";
 
     for (const [s, e] of connections) {
       const a = lms[s], b = lms[e];
@@ -370,11 +324,10 @@ export default function PoseTestClient() {
     const video    = videoRef.current;
     const canvas   = canvasRef.current;
     const detector = landmarkerRef.current;
-
     if (!runningRef.current || !video || !canvas || !detector) return;
 
     if (video.videoWidth > 0 && video.videoHeight > 0) {
-      if (canvas.width !== video.videoWidth)   canvas.width  = video.videoWidth;
+      if (canvas.width  !== video.videoWidth)  canvas.width  = video.videoWidth;
       if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
 
       const now = performance.now();
@@ -385,8 +338,7 @@ export default function PoseTestClient() {
         const lms    = (result.landmarks?.[0] ?? []) as Landmark[];
 
         setLandmarks(lms.length);
-        drawPose(lms, phaseRef.current);
-
+        drawPose(lms, phaseRef.current, unlockedRef.current);
         if (lms.length > 0) processPose(lms);
         else setFeedback("⚠️ No pose detected");
 
@@ -399,13 +351,12 @@ export default function PoseTestClient() {
         }
       }
     }
-
     rafRef.current = requestAnimationFrame(loop);
   }
 
   useEffect(() => () => stop(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Labels / colours for UI ──────────────────────────────────────
+  // ── UI labels ────────────────────────────────────────────────────
   const phaseLabel: Record<PushupPhase, string> = {
     no_plank:   "Get into plank ↓",
     top:        "TOP — go down!",
@@ -443,7 +394,8 @@ export default function PoseTestClient() {
         <div style={{
           textAlign: "center", padding: "20px 0 12px", borderRadius: 18,
           background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)", marginBottom: 14,
+          border: `1px solid ${unlocked ? "rgba(0,255,136,0.2)" : "rgba(255,255,255,0.08)"}`,
+          marginBottom: 14, transition: "border-color 0.3s",
         }}>
           <div style={{
             fontSize: 96, fontWeight: 900, lineHeight: 1, letterSpacing: -4,
@@ -467,45 +419,57 @@ export default function PoseTestClient() {
 
           {/* Feedback */}
           {feedback && (
-            <div style={{ marginTop: 8, fontSize: 12, color: "#ff6644", fontWeight: 600 }}>
+            <div style={{
+              marginTop: 8, fontSize: 12, fontWeight: 600,
+              color: feedback.startsWith("✅") ? "#00ff88" : "#ff6644",
+            }}>
               {feedback}
             </div>
           )}
         </div>
 
-        {/* Angle meters */}
+        {/* Status bar: unlocked indicator + angles */}
         {status === "running" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <AngleMeter label="Elbow" angle={elbowAngle} min={60} max={180}
-              good={elbowAngle >= TOP_ELBOW_ANGLE || elbowAngle <= BOTTOM_ELBOW_ANGLE} />
-            <AngleMeter label="Body" angle={bodyAngle} min={100} max={180}
-              good={bodyAngle >= BODY_STRAIGHT_MIN} />
-          </div>
-        )}
+          <div style={{ marginBottom: 14 }}>
 
-        {/* Plank debug meter */}
-        {status === "running" && (
-          <div style={{
-            marginBottom: 14, padding: "10px 12px", borderRadius: 12,
-            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
-              <span>Plank check (shoulder↔hip gap / body height)</span>
-              <span style={{ color: plankRatio <= PLANK_V_RATIO_MAX * 100 ? "#00ff88" : "#ff6644", fontWeight: 700 }}>
-                {plankRatio}% {plankRatio <= PLANK_V_RATIO_MAX * 100 ? "✓" : "✗"}
-              </span>
-            </div>
-            <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
+            {/* Plank gate status */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 14px", borderRadius: 12, marginBottom: 10,
+              background: unlocked ? "rgba(0,255,136,0.08)" : "rgba(255,100,68,0.08)",
+              border: `1px solid ${unlocked ? "rgba(0,255,136,0.25)" : "rgba(255,100,68,0.25)"}`,
+              transition: "all 0.3s",
+            }}>
               <div style={{
-                height: "100%",
-                width: `${Math.min(100, plankRatio)}%`,
-                borderRadius: 3,
-                background: plankRatio <= 30 ? "#00ff88" : "#ff6644",
-                transition: "width 0.15s, background 0.2s",
+                width: 10, height: 10, borderRadius: "50%",
+                background: unlocked ? "#00ff88" : "#ff6644",
+                boxShadow: unlocked ? "0 0 8px #00ff88" : "none",
+                flexShrink: 0,
               }} />
+              <div style={{ fontSize: 13, fontWeight: 700,
+                color: unlocked ? "#00ff88" : "#ff6644" }}>
+                {unlocked ? "PLANK LOCKED IN — reps counting" : "WAITING FOR PLANK POSITION"}
+              </div>
+              <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.6 }}>
+                body: {bodyAngle}°
+              </div>
             </div>
-            <div style={{ fontSize: 11, opacity: 0.4, marginTop: 4 }}>
-              Must be ≤ 30% to count reps. Currently: {plankRatio}%
+
+            {/* Angle meters */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <AngleMeter
+                label="Elbow"
+                angle={elbowAngle}
+                min={60} max={180}
+                good={elbowAngle >= TOP_ELBOW_ANGLE || elbowAngle <= BOTTOM_ELBOW_ANGLE}
+              />
+              <AngleMeter
+                label="Body"
+                angle={bodyAngle}
+                min={100} max={180}
+                good={bodyAngle >= PLANK_BODY_MIN}
+                target={PLANK_BODY_MIN}
+              />
             </div>
           </div>
         )}
@@ -529,9 +493,11 @@ export default function PoseTestClient() {
             borderRadius: 10, background: "rgba(0,0,0,0.7)",
             fontSize: 12, lineHeight: 1.6, backdropFilter: "blur(4px)",
           }}>
-            <div style={{ opacity: 0.6 }}>Status: {status}</div>
             <div style={{ opacity: 0.6 }}>FPS: {fps}</div>
             <div style={{ opacity: 0.6 }}>Landmarks: {landmarks}/33</div>
+            <div style={{ color: unlocked ? "#00ff88" : "#ff6644", fontWeight: 700 }}>
+              {unlocked ? "● ACTIVE" : "○ WAITING"}
+            </div>
           </div>
         </div>
 
@@ -545,12 +511,10 @@ export default function PoseTestClient() {
               fontWeight: 800, fontSize: 15,
               background: status === "running" ? "rgba(0,255,136,0.15)" : "#00ff88",
               color: status === "running" ? "#00ff88" : "#000",
-              transition: "all 0.2s",
             }}>
             {status === "loading" ? "Loading..." : status === "running" ? "Running ✓" : "Start"}
           </button>
-          <button onClick={stop}
-            disabled={status !== "running" && status !== "loading"}
+          <button onClick={stop} disabled={status !== "running" && status !== "loading"}
             style={{
               flex: 1, padding: "14px 0", borderRadius: 12,
               border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer",
@@ -570,28 +534,29 @@ export default function PoseTestClient() {
         {/* Guide */}
         <div style={{
           padding: 16, borderRadius: 14, background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.07)", fontSize: 13, lineHeight: 1.7,
+          border: "1px solid rgba(255,255,255,0.07)", fontSize: 13, lineHeight: 1.8,
         }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, color: "#00ff88" }}>How to use</div>
+          <div style={{ fontWeight: 700, marginBottom: 8, color: "#00ff88" }}>How it works</div>
           <div style={{ opacity: 0.7 }}>
-            📱 Place your phone on its side at roughly hip/waist height so your <strong>full body is visible from the side</strong>.<br />
-            🤸 Get into pushup/plank position — the <strong>Plank check</strong> meter above must turn green before reps count.<br />
-            ✅ Skeleton colour: <span style={{ color: "#00ff88" }}>green</span> = top,{" "}
-            <span style={{ color: "#ffcc00" }}>yellow</span> = going down,{" "}
-            <span style={{ color: "#ff6644" }}>red</span> = bottom,{" "}
-            <span style={{ color: "#44aaff" }}>blue</span> = going up.<br />
-            ⚠️ Standing and moving your arms will <strong>not</strong> count — plank gate blocks it.
+            <strong style={{ color: "white" }}>1.</strong> Place phone sideways so your full body is visible.<br />
+            <strong style={{ color: "white" }}>2.</strong> Get into pushup position — body angle must hit {PLANK_BODY_MIN}°+ to unlock (status turns green).<br />
+            <strong style={{ color: "white" }}>3.</strong> Once unlocked, just do reps — the gate doesn't re-check mid-rep.<br />
+            <strong style={{ color: "white" }}>4.</strong> Standing up fully (&lt;{STAND_UP_BODY_ANGLE}°) re-locks the gate.<br />
+            <span style={{ opacity: 0.5 }}>Skeleton: grey = waiting · green = top · yellow = down · red = bottom · blue = up</span>
           </div>
         </div>
+
       </div>
     </main>
   );
 }
 
-function AngleMeter({ label, angle, min = 60, max = 180, good }: {
-  label: string; angle: number; min?: number; max?: number; good: boolean;
+function AngleMeter({ label, angle, min = 60, max = 180, good, target }: {
+  label: string; angle: number; min?: number; max?: number;
+  good: boolean; target?: number;
 }) {
   const pct = Math.max(0, Math.min(1, (angle - min) / (max - min)));
+  const targetPct = target ? Math.max(0, Math.min(1, (target - min) / (max - min))) : null;
   return (
     <div style={{
       padding: "10px 12px", borderRadius: 12,
@@ -601,13 +566,27 @@ function AngleMeter({ label, angle, min = 60, max = 180, good }: {
         <span>{label} angle</span>
         <span style={{ color: good ? "#00ff88" : "white", fontWeight: 700 }}>{angle}°</span>
       </div>
-      <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
+      <div style={{ position: "relative", height: 6, borderRadius: 3,
+                    background: "rgba(255,255,255,0.1)", overflow: "visible" }}>
         <div style={{
           height: "100%", width: `${pct * 100}%`, borderRadius: 3,
           background: good ? "#00ff88" : "#ffcc00",
           transition: "width 0.1s, background 0.2s",
         }} />
+        {/* Target line */}
+        {targetPct !== null && (
+          <div style={{
+            position: "absolute", top: -2, bottom: -2,
+            left: `${targetPct * 100}%`,
+            width: 2, background: "rgba(255,255,255,0.4)", borderRadius: 1,
+          }} />
+        )}
       </div>
+      {target && (
+        <div style={{ fontSize: 10, opacity: 0.4, marginTop: 3 }}>
+          target: {target}°+
+        </div>
+      )}
     </div>
   );
 }
