@@ -12,7 +12,7 @@ type Status = "idle" | "loading" | "running" | "error";
 const MODEL_PATH = "/models/pose_landmarker_lite.task";
 const WASM_PATH  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 const DETECTION_INTERVAL_MS = 66;
-const BATTLE_DURATION_SEC   = 30;
+const BATTLE_DURATION_SEC   = 150;
 const POSITION_HOLD_FRAMES  = 8; // must be valid for N consecutive frames before countdown
 
 // Rep thresholds
