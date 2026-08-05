@@ -1,3 +1,5 @@
+//DEV NOTE : dis shi just imports whats written in components/battle/BattleClient.tsx
+
 import BattleClient from "@/components/battle/BattleClient";
 
 interface Props {
