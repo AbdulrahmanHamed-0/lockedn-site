@@ -296,7 +296,7 @@ export default function LobbyClient({ roomId }: Props) {
               {inviteUrl}
             </div>
             <button onClick={copyInvite} style={{
-              width: "100%", padding: "13px 0", borderRadius: 12, border: 0,
+              width: "100%", padding: "13px 0", borderRadius: 12, 
               background: copied ? "rgba(0,255,136,0.15)" : "#00ff88",
               color: copied ? "#00ff88" : "#000",
               fontSize: 14, fontWeight: 900, cursor: "pointer",
