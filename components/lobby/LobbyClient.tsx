@@ -415,7 +415,7 @@ export default function LobbyClient({ roomId }: Props) {
               onClick={handleReady}
               disabled={myReady}
               style={{
-                width: "100%", padding: "15px 0", borderRadius: 14, border: 0,
+                width: "100%", padding: "15px 0", borderRadius: 14, 
                 fontWeight: 900, fontSize: 16, cursor: myReady ? "default" : "pointer",
                 background: myReady
                   ? "rgba(0,255,136,0.15)"
