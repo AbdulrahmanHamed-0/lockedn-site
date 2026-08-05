@@ -1,3 +1,5 @@
+//DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
