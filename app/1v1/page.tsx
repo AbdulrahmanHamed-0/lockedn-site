@@ -1,3 +1,5 @@
+//DEV NOTE : dis shi just imports whats written in components/one-v-one/PoseTestClient.tsx
+
 "use client";
 import { useRouter } from "next/navigation";
 import PoseTestClient from "../../components/one-v-one/PoseTestClient";
