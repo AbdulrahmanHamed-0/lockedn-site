@@ -1,3 +1,5 @@
+//DEV NOTE : dis shi just imports whats written in components/lobby/LobbyClient.tsx
+
 import LobbyClient from "@/components/lobby/LobbyClient";
 
 interface Props {
