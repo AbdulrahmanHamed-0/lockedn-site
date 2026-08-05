@@ -157,10 +157,10 @@ export default function LobbyClient({ roomId }: Props) {
   }
 
   // ── WebRTC: guest answers offer ──────────────────────────────────
-  async function handleOffer(pc: RTCPeerConnection, offerPayload: Record<string, unknown>) {
-    await pc.setRemoteDescription(new RTCSessionDescription(
-      offerPayload as RTCSessionDescriptionInit
-    ));
+async function handleOffer(pc: RTCPeerConnection, offerPayload: Record<string, unknown>) {
+  await pc.setRemoteDescription(new RTCSessionDescription(
+    offerPayload as unknown as RTCSessionDescriptionInit
+  ));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await supabase.from("signals").insert({
@@ -173,19 +173,18 @@ export default function LobbyClient({ roomId }: Props) {
   }
 
   // ── WebRTC: host receives answer ─────────────────────────────────
-  async function handleAnswer(pc: RTCPeerConnection, answerPayload: Record<string, unknown>) {
-    if (pc.signalingState === "stable") return;
-    await pc.setRemoteDescription(new RTCSessionDescription(
-      answerPayload as RTCSessionDescriptionInit
-    ));
-  }
+async function handleAnswer(pc: RTCPeerConnection, answerPayload: Record<string, unknown>) {
+  if (pc.signalingState === "stable") return;
+  await pc.setRemoteDescription(new RTCSessionDescription(
+    answerPayload as unknown as RTCSessionDescriptionInit
+  ));
 
   // ── WebRTC: handle ICE candidate ─────────────────────────────────
-  async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unknown>) {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(
-        icePayload as RTCIceCandidateInit
-      ));
+async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unknown>) {
+  try {
+    await pc.addIceCandidate(new RTCIceCandidate(
+      icePayload as unknown as RTCIceCandidateInit
+    ));
     } catch {
       if (!makingOfferRef.current) console.warn("ICE candidate error");
     }
