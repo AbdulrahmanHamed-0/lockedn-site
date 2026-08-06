@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... pregame lobby (should include "READY" , "MIC FOR TRASH TALK" , "SCREENS SIDE BY SIDE") 
 
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -15,62 +14,28 @@ export default function LobbyClient({ roomId }: Props) {
   const router   = useRouter();
   const playerId = getPlayerId();
 
-  // ── Refs ────────────────────────────────────────────────────────
-  const localVideoRef   = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef  = useRef<HTMLVideoElement | null>(null);
-  const streamRef       = useRef<MediaStream | null>(null);
-  const pcRef           = useRef<RTCPeerConnection | null>(null);
-  const isHostRef       = useRef(false);
-  const makingOfferRef  = useRef(false);
+  const localVideoRef  = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef      = useRef<MediaStream | null>(null);
+  const pcRef          = useRef<RTCPeerConnection | null>(null);
+  const isHostRef      = useRef(false);
+  const makingOfferRef = useRef(false);
 
-  // ── State ────────────────────────────────────────────────────────
-  const [lobbyState, setLobbyState] = useState<LobbyState>("camera_prompt");
-  const [isHost,     setIsHost]     = useState(false);
-  const [myReady,    setMyReady]    = useState(false);
-  const [oppReady,   setOppReady]   = useState(false);
-  const [countdown,  setCountdown]  = useState(3);
-  const [copied,     setCopied]     = useState(false);
-  const [error,      setError]      = useState("");
-  const [lobbyTimer, setLobbyTimer] = useState(15);
-  const [cameraErr,  setCameraErr]  = useState("");
-  const [remoteReady, setRemoteReady] = useState(false); // true when remote stream arrives
+  const [lobbyState,   setLobbyState]   = useState<LobbyState>("camera_prompt");
+  const [isHost,       setIsHost]       = useState(false);
+  const [myReady,      setMyReady]      = useState(false);
+  const [oppReady,     setOppReady]     = useState(false);
+  const [countdown,    setCountdown]    = useState(3);
+  const [copied,       setCopied]       = useState(false);
+  const [error,        setError]        = useState("");
+  const [lobbyTimer,   setLobbyTimer]   = useState(15);
+  const [cameraErr,    setCameraErr]    = useState("");
+  const [remoteReady,  setRemoteReady]  = useState(false);
 
   const inviteUrl = typeof window !== "undefined"
     ? `${window.location.origin}/room/${roomId}` : "";
 
-  // ── Camera: request once, attach directly to video ref ──────────
-  const requestCamera = useCallback(async () => {
-    setCameraErr("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 }, height: { ideal: 480 },
-          frameRate: { ideal: 15 }, facingMode: "user",
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-
-      // Attach stream directly — no useEffect, no re-renders causing flicker
-      const vid = localVideoRef.current;
-      if (vid) {
-        vid.srcObject = stream;
-        vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
-      }
-
-      setLobbyState("connecting");
-      await initRoom();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Camera denied";
-      setCameraErr(
-        msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
-          ? "Camera permission denied. Allow camera access and try again."
-          : "Could not access camera: " + msg
-      );
-    }
-  }, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Attach stream to local video when ref mounts (lobby screen swap)
+  // ── Callback refs — attach stream without re-render side effects ─
   const setLocalVideoRef = useCallback((el: HTMLVideoElement | null) => {
     localVideoRef.current = el;
     if (el && streamRef.current && el.srcObject !== streamRef.current) {
@@ -79,7 +44,6 @@ export default function LobbyClient({ roomId }: Props) {
     }
   }, []);
 
-  // Attach remote stream to remote video when ref mounts
   const setRemoteVideoRef = useCallback((el: HTMLVideoElement | null) => {
     remoteVideoRef.current = el;
     if (el && pcRef.current) {
@@ -93,7 +57,34 @@ export default function LobbyClient({ roomId }: Props) {
     }
   }, []);
 
-  // ── WebRTC: create peer connection ───────────────────────────────
+  // ── Request camera ───────────────────────────────────────────────
+  const requestCamera = useCallback(async () => {
+    setCameraErr("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 },
+                 frameRate: { ideal: 15 }, facingMode: "user" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      const vid = localVideoRef.current;
+      if (vid) {
+        vid.srcObject = stream;
+        vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+      }
+      setLobbyState("connecting");
+      await initRoom();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Camera denied";
+      setCameraErr(
+        msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
+          ? "Camera permission denied. Allow camera access and try again."
+          : "Could not access camera: " + msg
+      );
+    }
+  }, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── WebRTC ───────────────────────────────────────────────────────
   function createPeerConnection() {
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -102,12 +93,10 @@ export default function LobbyClient({ roomId }: Props) {
       ],
     });
 
-    // Add local tracks
     streamRef.current?.getTracks().forEach(track => {
       pc.addTrack(track, streamRef.current!);
     });
 
-    // When remote track arrives → attach to remote video
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams;
       setRemoteReady(true);
@@ -118,7 +107,6 @@ export default function LobbyClient({ roomId }: Props) {
       }
     };
 
-    // When ICE candidate is ready → send via Supabase signals table
     pc.onicecandidate = async (event) => {
       if (!event.candidate) return;
       await supabase.from("signals").insert({
@@ -130,84 +118,64 @@ export default function LobbyClient({ roomId }: Props) {
       });
     };
 
-    pc.onconnectionstatechange = () => {
-      console.log("WebRTC state:", pc.connectionState);
-    };
-
     pcRef.current = pc;
     return pc;
   }
 
-  // ── WebRTC: host creates offer ───────────────────────────────────
   async function createOffer(pc: RTCPeerConnection) {
     makingOfferRef.current = true;
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await supabase.from("signals").insert({
-        room_id: roomId,
-        from_id: playerId,
-        to_id:   "guest",
-        type:    "offer",
-        payload: { type: offer.type, sdp: offer.sdp },
+        room_id: roomId, from_id: playerId, to_id: "guest",
+        type: "offer", payload: { type: offer.type, sdp: offer.sdp },
       });
     } finally {
       makingOfferRef.current = false;
     }
   }
 
-  // ── WebRTC: guest answers offer ──────────────────────────────────
-async function handleOffer(pc: RTCPeerConnection, offerPayload: Record<string, unknown>) {
-  await pc.setRemoteDescription(new RTCSessionDescription(
-    offerPayload as unknown as RTCSessionDescriptionInit
-  ));
+  async function handleOffer(pc: RTCPeerConnection, offerPayload: Record<string, unknown>) {
+    await pc.setRemoteDescription(
+      new RTCSessionDescription(offerPayload as unknown as RTCSessionDescriptionInit)
+    );
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await supabase.from("signals").insert({
-      room_id: roomId,
-      from_id: playerId,
-      to_id:   "host",
-      type:    "answer",
-      payload: { type: answer.type, sdp: answer.sdp },
+      room_id: roomId, from_id: playerId, to_id: "host",
+      type: "answer", payload: { type: answer.type, sdp: answer.sdp },
     });
   }
 
-  // ── WebRTC: host receives answer ─────────────────────────────────
-async function handleAnswer(pc: RTCPeerConnection, answerPayload: Record<string, unknown>) {
-  if (pc.signalingState === "stable") return;
-  await pc.setRemoteDescription(new RTCSessionDescription(
-    answerPayload as unknown as RTCSessionDescriptionInit
-  ));
+  async function handleAnswer(pc: RTCPeerConnection, answerPayload: Record<string, unknown>) {
+    if (pc.signalingState === "stable") return;
+    await pc.setRemoteDescription(
+      new RTCSessionDescription(answerPayload as unknown as RTCSessionDescriptionInit)
+    );
+  }
 
-  // ── WebRTC: handle ICE candidate ─────────────────────────────────
-async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unknown>) {
-  try {
-    await pc.addIceCandidate(new RTCIceCandidate(
-      icePayload as unknown as RTCIceCandidateInit
-    ));
+  async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unknown>) {
+    try {
+      await pc.addIceCandidate(
+        new RTCIceCandidate(icePayload as unknown as RTCIceCandidateInit)
+      );
     } catch {
       if (!makingOfferRef.current) console.warn("ICE candidate error");
     }
   }
 
-  // ── Subscribe to WebRTC signals ──────────────────────────────────
   function subscribeToSignals(pc: RTCPeerConnection, myRole: "host" | "guest") {
-    const targetId = myRole === "host" ? "host" : "guest";
-
     supabase
-      .channel(`signals:${roomId}:${targetId}`)
+      .channel(`signals:${roomId}:${myRole}`)
       .on("postgres_changes", {
-        event:  "INSERT",
-        schema: "public",
-        table:  "signals",
-        filter: `room_id=eq.${roomId}`,
+        event: "INSERT", schema: "public",
+        table: "signals", filter: `room_id=eq.${roomId}`,
       }, async (payload) => {
         const signal = payload.new as {
           to_id: string; type: string; payload: Record<string, unknown>;
         };
-        // Only process signals directed at me
         if (signal.to_id !== myRole) return;
-
         if      (signal.type === "offer")  await handleOffer(pc, signal.payload);
         else if (signal.type === "answer") await handleAnswer(pc, signal.payload);
         else if (signal.type === "ice")    await handleIce(pc, signal.payload);
@@ -221,7 +189,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
       .from("rooms").select("*").eq("id", roomId).single();
 
     if (err || !data) {
-      // Create room as host
       const { error: createErr } = await supabase.from("rooms").insert({
         id: roomId, host_id: playerId, status: "waiting",
       });
@@ -238,19 +205,19 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         setError("This match is already over."); setLobbyState("error"); return;
       }
       if (room.host_id === playerId) {
-        // Host rejoining
         isHostRef.current = true;
         setIsHost(true);
         setMyReady(room.host_ready);
         setOppReady(room.guest_ready);
-        setLobbyState(room.guest_id ? "lobby" : "waiting");
         if (room.guest_id) {
+          setLobbyState("lobby");
           const pc = createPeerConnection();
           subscribeToSignals(pc, "host");
           await createOffer(pc);
+        } else {
+          setLobbyState("waiting");
         }
       } else if (!room.guest_id || room.guest_id === playerId) {
-        // Guest joining
         const { error: joinErr } = await supabase.from("rooms")
           .update({ guest_id: playerId, status: "ready" }).eq("id", roomId);
         if (joinErr) {
@@ -261,7 +228,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         setMyReady(room.guest_ready);
         setOppReady(room.host_ready);
         setLobbyState("lobby");
-        // Guest sets up PC and waits for host's offer
         const pc = createPeerConnection();
         subscribeToSignals(pc, "guest");
       } else {
@@ -270,7 +236,7 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
     }
   }, [roomId, playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Realtime: room state changes ─────────────────────────────────
+  // ── Realtime: room changes ───────────────────────────────────────
   useEffect(() => {
     if (lobbyState === "camera_prompt") return;
 
@@ -282,7 +248,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
       }, async (payload) => {
         const updated = payload.new as Room;
 
-        // Guest just joined → host starts WebRTC
         if (updated.guest_id && lobbyState === "waiting" && isHostRef.current) {
           setLobbyState("lobby");
           const pc = createPeerConnection();
@@ -290,7 +255,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
           await createOffer(pc);
         }
 
-        // Update ready states
         if (isHostRef.current) {
           setMyReady(updated.host_ready);
           setOppReady(updated.guest_ready);
@@ -299,13 +263,11 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
           setOppReady(updated.host_ready);
         }
 
-        // Both ready → countdown
         if (updated.host_ready && updated.guest_ready && updated.status === "countdown") {
           setLobbyState("countdown");
           runCountdown();
         }
 
-        // Battle started
         if (updated.status === "battle") {
           router.push(`/battle/${roomId}`);
         }
@@ -315,8 +277,7 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
     return () => { supabase.removeChannel(channel); };
   }, [lobbyState, roomId, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Lobby timer ──────────────────────────────────────────────────
-  // Using setInterval instead of recursive setTimeout to avoid re-renders
+  // ── Lobby timer — setInterval, doesn't cause video re-renders ───
   useEffect(() => {
     if (lobbyState !== "lobby") return;
     const interval = setInterval(() => {
@@ -326,7 +287,7 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [lobbyState]); // only starts once when lobby begins
+  }, [lobbyState]);
 
   // ── Ready up ─────────────────────────────────────────────────────
   async function handleReady() {
@@ -383,11 +344,11 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
       <div style={{
         padding: "12px 20px", display: "flex",
         justifyContent: "space-between", alignItems: "center",
-        borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0,
-        zIndex: 10,
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        flexShrink: 0, zIndex: 10,
       }}>
         <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -1 }}>
-          LOCKED'N<span style={{ color: "#00ff88" }}>.</span>
+          LOCKED&apos;N<span style={{ color: "#00ff88" }}>.</span>
         </div>
         <div style={{
           fontSize: 11, opacity: 0.5, letterSpacing: 2,
@@ -402,7 +363,7 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         </div>
       </div>
 
-      {/* ══ CAMERA PERMISSION ══ */}
+      {/* CAMERA PERMISSION */}
       {lobbyState === "camera_prompt" && (
         <div style={{
           flex: 1, display: "flex", flexDirection: "column",
@@ -443,15 +404,18 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         </div>
       )}
 
-      {/* ══ CONNECTING ══ */}
+      {/* CONNECTING */}
       {lobbyState === "connecting" && (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        <div style={{
+          flex: 1, display: "flex", alignItems: "center",
+          justifyContent: "center", gap: 12,
+        }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00ff88" }} />
           <span style={{ opacity: 0.5, fontSize: 14 }}>Setting up room...</span>
         </div>
       )}
 
-      {/* ══ WAITING (host only) ══ */}
+      {/* WAITING */}
       {lobbyState === "waiting" && (
         <div style={{
           flex: 1, display: "flex", flexDirection: "column",
@@ -474,7 +438,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
               padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#00ff88",
             }}>YOU</div>
           </div>
-
           <div style={{
             width: "100%", maxWidth: 340, padding: 18, borderRadius: 16,
             background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
@@ -501,7 +464,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
               {copied ? "✓ COPIED!" : "COPY INVITE LINK"}
             </button>
           </div>
-
           <div style={{ opacity: 0.35, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00ff88", opacity: 0.6 }} />
             Waiting for opponent to join...
@@ -509,17 +471,16 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         </div>
       )}
 
-      {/* ══ LOBBY: top/bottom split ══ */}
+      {/* LOBBY: top/bottom split */}
       {lobbyState === "lobby" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-          {/* Top half — OPPONENT */}
+          {/* Top — OPPONENT */}
           <div style={{
             flex: 1, position: "relative", background: "#0d0d0d",
             overflow: "hidden",
             borderBottom: "2px solid rgba(255,255,255,0.08)",
           }}>
-            {/* Remote video — shown when WebRTC connected */}
             <video
               ref={setRemoteVideoRef}
               playsInline muted autoPlay
@@ -530,22 +491,15 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
                 transition: "opacity 0.5s",
               }}
             />
-
-            {/* Placeholder shown until remote stream arrives */}
             {!remoteReady && (
               <div style={{
-                position: "absolute", inset: 0,
-                display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", gap: 10,
+                position: "absolute", inset: 0, display: "flex",
+                flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
               }}>
                 <div style={{ fontSize: 44 }}>👤</div>
-                <div style={{ fontSize: 12, opacity: 0.4, letterSpacing: 1 }}>
-                  Connecting video...
-                </div>
+                <div style={{ fontSize: 12, opacity: 0.4, letterSpacing: 1 }}>Connecting video...</div>
               </div>
             )}
-
-            {/* Opponent overlays */}
             <div style={{
               position: "absolute", top: 10, left: 12,
               fontSize: 11, fontWeight: 700, opacity: 0.6, letterSpacing: 1,
@@ -561,7 +515,7 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
             </div>
           </div>
 
-          {/* Bottom half — YOU */}
+          {/* Bottom — YOU */}
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
             <video
               ref={setLocalVideoRef}
@@ -571,14 +525,10 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
                 objectFit: "cover", transform: "scaleX(-1)",
               }}
             />
-
-            {/* Gradient for controls readability */}
             <div style={{
               position: "absolute", inset: 0, pointerEvents: "none",
               background: "linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.85) 100%)",
             }} />
-
-            {/* YOU label + ready badge */}
             <div style={{
               position: "absolute", top: 10, left: 12,
               fontSize: 11, fontWeight: 700, letterSpacing: 1,
@@ -592,8 +542,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
             }}>
               {myReady ? "✓ READY" : "not ready"}
             </div>
-
-            {/* Bottom controls */}
             <div style={{
               position: "absolute", bottom: 0, left: 0, right: 0,
               padding: "10px 16px 20px",
@@ -610,7 +558,6 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
                   {lobbyTimer}s
                 </div>
               </div>
-
               <button
                 onClick={handleReady}
                 disabled={myReady}
@@ -634,14 +581,16 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         </div>
       )}
 
-      {/* ══ COUNTDOWN ══ */}
+      {/* COUNTDOWN */}
       {lobbyState === "countdown" && (
         <div style={{
           flex: 1, display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center", gap: 16,
           background: "rgba(0,0,0,0.96)",
         }}>
-          <div style={{ fontSize: 13, letterSpacing: 4, opacity: 0.5, fontWeight: 700 }}>GET READY</div>
+          <div style={{ fontSize: 13, letterSpacing: 4, opacity: 0.5, fontWeight: 700 }}>
+            GET READY
+          </div>
           <div style={{
             fontSize: 140, fontWeight: 900, letterSpacing: -6, lineHeight: 1,
             color: countdown <= 1 ? "#00ff88" : "white",
@@ -654,7 +603,7 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
         </div>
       )}
 
-      {/* ══ ERROR ══ */}
+      {/* ERROR */}
       {lobbyState === "error" && (
         <div style={{
           flex: 1, display: "flex", flexDirection: "column",
@@ -666,7 +615,9 @@ async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unkno
             padding: "12px 24px", borderRadius: 12,
             border: "1px solid rgba(255,255,255,0.2)",
             background: "transparent", color: "white", fontSize: 14, cursor: "pointer",
-          }}>Go Home</button>
+          }}>
+            Go Home
+          </button>
         </div>
       )}
     </div>
