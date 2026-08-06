@@ -16,10 +16,12 @@ export default function LobbyClient({ roomId }: Props) {
 
   const localVideoRef  = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
   const pcRef          = useRef<RTCPeerConnection | null>(null);
   const isHostRef      = useRef(false);
   const makingOfferRef = useRef(false);
+  const micTrackRef    = useRef<MediaStreamTrack | null>(null);
 
   const [lobbyState,   setLobbyState]   = useState<LobbyState>("camera_prompt");
   const [isHost,       setIsHost]       = useState(false);
@@ -31,11 +33,13 @@ export default function LobbyClient({ roomId }: Props) {
   const [lobbyTimer,   setLobbyTimer]   = useState(15);
   const [cameraErr,    setCameraErr]    = useState("");
   const [remoteReady,  setRemoteReady]  = useState(false);
+  const [isMuted,      setIsMuted]      = useState(false);
+  const [oppSpeaking,  setOppSpeaking]  = useState(false); // voice activity
 
   const inviteUrl = typeof window !== "undefined"
     ? `${window.location.origin}/room/${roomId}` : "";
 
-  // ── Callback refs — attach stream without re-render side effects ─
+  // ── Callback refs ────────────────────────────────────────────────
   const setLocalVideoRef = useCallback((el: HTMLVideoElement | null) => {
     localVideoRef.current = el;
     if (el && streamRef.current && el.srcObject !== streamRef.current) {
@@ -46,43 +50,100 @@ export default function LobbyClient({ roomId }: Props) {
 
   const setRemoteVideoRef = useCallback((el: HTMLVideoElement | null) => {
     remoteVideoRef.current = el;
-    if (el && pcRef.current) {
-      const receivers = pcRef.current.getReceivers();
-      const videoReceiver = receivers.find(r => r.track?.kind === "video");
-      if (videoReceiver?.track) {
-        const remoteStream = new MediaStream([videoReceiver.track]);
-        el.srcObject = remoteStream;
-        el.onloadedmetadata = () => { el.play().catch(() => {}); };
-      }
-    }
   }, []);
 
-  // ── Request camera ───────────────────────────────────────────────
+  // ── Request camera + mic ─────────────────────────────────────────
   const requestCamera = useCallback(async () => {
     setCameraErr("");
     try {
+      // Request both camera and mic together
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 },
                  frameRate: { ideal: 15 }, facingMode: "user" },
-        audio: false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        },
       });
+
       streamRef.current = stream;
+
+      // Save mic track reference for mute toggle
+      const micTrack = stream.getAudioTracks()[0];
+      if (micTrack) micTrackRef.current = micTrack;
+
+      // Attach video to local preview (muted — we don't want to hear ourselves)
       const vid = localVideoRef.current;
       if (vid) {
-        vid.srcObject = stream;
+        // Only video tracks for local preview
+        const videoOnlyStream = new MediaStream(stream.getVideoTracks());
+        vid.srcObject = videoOnlyStream;
         vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
       }
+
       setLobbyState("connecting");
       await initRoom();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Camera denied";
-      setCameraErr(
-        msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
-          ? "Camera permission denied. Allow camera access and try again."
-          : "Could not access camera: " + msg
-      );
+      const msg = err instanceof Error ? err.message : "Permission denied";
+      // If mic denied but camera ok, try camera only
+      if (msg.toLowerCase().includes("audio") || msg.toLowerCase().includes("microphone")) {
+        try {
+          const videoOnly = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 },
+                     frameRate: { ideal: 15 }, facingMode: "user" },
+            audio: false,
+          });
+          streamRef.current = videoOnly;
+          const vid = localVideoRef.current;
+          if (vid) {
+            vid.srcObject = videoOnly;
+            vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+          }
+          setLobbyState("connecting");
+          await initRoom();
+        } catch {
+          setCameraErr("Camera permission denied. Please allow camera access.");
+        }
+      } else {
+        setCameraErr(
+          msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
+            ? "Camera/mic permission denied. Allow access and try again."
+            : "Could not access camera: " + msg
+        );
+      }
     }
   }, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Mute / unmute toggle ─────────────────────────────────────────
+  function toggleMute() {
+    const micTrack = micTrackRef.current;
+    if (!micTrack) return;
+    micTrack.enabled = !micTrack.enabled;
+    setIsMuted(!micTrack.enabled);
+  }
+
+  // ── Voice activity detection (opponent speaking indicator) ───────
+  function startVoiceActivityDetection(stream: MediaStream) {
+    try {
+      const audioCtx  = new AudioContext();
+      const source    = audioCtx.createMediaStreamSource(stream);
+      const analyser  = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+
+      const check = () => {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        setOppSpeaking(avg > 10); // threshold — tweak if needed
+        requestAnimationFrame(check);
+      };
+      check();
+    } catch {
+      // AudioContext not available — skip VAD silently
+    }
+  }
 
   // ── WebRTC ───────────────────────────────────────────────────────
   function createPeerConnection() {
@@ -93,17 +154,38 @@ export default function LobbyClient({ roomId }: Props) {
       ],
     });
 
+    // Add ALL tracks (video + audio) to the peer connection
     streamRef.current?.getTracks().forEach(track => {
       pc.addTrack(track, streamRef.current!);
     });
 
+    // When remote tracks arrive
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams;
-      setRemoteReady(true);
-      const vid = remoteVideoRef.current;
-      if (vid) {
-        vid.srcObject = remoteStream;
-        vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+
+      // Video → attach to video element (muted for autoplay)
+      if (event.track.kind === "video") {
+        setRemoteReady(true);
+        const vid = remoteVideoRef.current;
+        if (vid) {
+          const videoOnlyStream = new MediaStream(remoteStream.getVideoTracks());
+          vid.srcObject = videoOnlyStream;
+          vid.muted = true; // required for autoplay
+          vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+        }
+      }
+
+      // Audio → attach to separate audio element (NOT muted)
+      if (event.track.kind === "audio") {
+        const audioEl = remoteAudioRef.current;
+        if (audioEl) {
+          const audioOnlyStream = new MediaStream([event.track]);
+          audioEl.srcObject = audioOnlyStream;
+          audioEl.muted = false;
+          audioEl.play().catch(() => {});
+          // Start voice activity detection on remote audio
+          startVoiceActivityDetection(audioOnlyStream);
+        }
       }
     };
 
@@ -136,9 +218,9 @@ export default function LobbyClient({ roomId }: Props) {
     }
   }
 
-  async function handleOffer(pc: RTCPeerConnection, offerPayload: Record<string, unknown>) {
+  async function handleOffer(pc: RTCPeerConnection, payload: Record<string, unknown>) {
     await pc.setRemoteDescription(
-      new RTCSessionDescription(offerPayload as unknown as RTCSessionDescriptionInit)
+      new RTCSessionDescription(payload as unknown as RTCSessionDescriptionInit)
     );
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -148,17 +230,17 @@ export default function LobbyClient({ roomId }: Props) {
     });
   }
 
-  async function handleAnswer(pc: RTCPeerConnection, answerPayload: Record<string, unknown>) {
+  async function handleAnswer(pc: RTCPeerConnection, payload: Record<string, unknown>) {
     if (pc.signalingState === "stable") return;
     await pc.setRemoteDescription(
-      new RTCSessionDescription(answerPayload as unknown as RTCSessionDescriptionInit)
+      new RTCSessionDescription(payload as unknown as RTCSessionDescriptionInit)
     );
   }
 
-  async function handleIce(pc: RTCPeerConnection, icePayload: Record<string, unknown>) {
+  async function handleIce(pc: RTCPeerConnection, payload: Record<string, unknown>) {
     try {
       await pc.addIceCandidate(
-        new RTCIceCandidate(icePayload as unknown as RTCIceCandidateInit)
+        new RTCIceCandidate(payload as unknown as RTCIceCandidateInit)
       );
     } catch {
       if (!makingOfferRef.current) console.warn("ICE candidate error");
@@ -236,7 +318,7 @@ export default function LobbyClient({ roomId }: Props) {
     }
   }, [roomId, playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Realtime: room changes ───────────────────────────────────────
+  // ── Realtime room changes ────────────────────────────────────────
   useEffect(() => {
     if (lobbyState === "camera_prompt") return;
 
@@ -277,7 +359,7 @@ export default function LobbyClient({ roomId }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, [lobbyState, roomId, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Lobby timer — setInterval, doesn't cause video re-renders ───
+  // ── Lobby timer ──────────────────────────────────────────────────
   useEffect(() => {
     if (lobbyState !== "lobby") return;
     const interval = setInterval(() => {
@@ -340,6 +422,9 @@ export default function LobbyClient({ roomId }: Props) {
       display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
 
+      {/* Hidden audio element for opponent voice — NOT muted */}
+      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: "none" }} />
+
       {/* Header */}
       <div style={{
         padding: "12px 20px", display: "flex",
@@ -370,13 +455,13 @@ export default function LobbyClient({ roomId }: Props) {
           alignItems: "center", justifyContent: "center",
           padding: 32, gap: 24, textAlign: "center",
         }}>
-          <div style={{ fontSize: 56 }}>📷</div>
+          <div style={{ fontSize: 56 }}>📷🎙️</div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
-              Camera Access Required
+              Camera & Mic Required
             </div>
             <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.7, maxWidth: 280 }}>
-              Both players need camera on to see each other in the lobby.
+              Both players need camera and mic on to see and trash talk each other in the lobby.
             </div>
           </div>
           {cameraErr && (
@@ -387,7 +472,7 @@ export default function LobbyClient({ roomId }: Props) {
             }}>
               {cameraErr}
               <div style={{ marginTop: 8, opacity: 0.7, fontSize: 11 }}>
-                Tip: Check browser settings and allow camera for this site.
+                Tip: Check browser settings and allow camera + mic for this site.
               </div>
             </div>
           )}
@@ -396,10 +481,10 @@ export default function LobbyClient({ roomId }: Props) {
             background: "linear-gradient(135deg, #00ff88, #00ccff)",
             color: "#000", fontSize: 16, fontWeight: 900, cursor: "pointer",
           }}>
-            {cameraErr ? "Try Again" : "Allow Camera & Continue"}
+            {cameraErr ? "Try Again" : "Allow Camera & Mic"}
           </button>
           <div style={{ fontSize: 11, opacity: 0.3 }}>
-            Camera frames stay on your device — nothing is uploaded
+            Camera and audio stay on your device — nothing is stored
           </div>
         </div>
       )}
@@ -428,8 +513,7 @@ export default function LobbyClient({ roomId }: Props) {
             position: "relative",
           }}>
             <video
-              ref={setLocalVideoRef}
-              playsInline muted autoPlay
+              ref={setLocalVideoRef} playsInline muted autoPlay
               style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}
             />
             <div style={{
@@ -482,8 +566,7 @@ export default function LobbyClient({ roomId }: Props) {
             borderBottom: "2px solid rgba(255,255,255,0.08)",
           }}>
             <video
-              ref={setRemoteVideoRef}
-              playsInline muted autoPlay
+              ref={setRemoteVideoRef} playsInline muted autoPlay
               style={{
                 width: "100%", height: "100%", objectFit: "cover",
                 transform: "scaleX(-1)",
@@ -497,13 +580,33 @@ export default function LobbyClient({ roomId }: Props) {
                 flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
               }}>
                 <div style={{ fontSize: 44 }}>👤</div>
-                <div style={{ fontSize: 12, opacity: 0.4, letterSpacing: 1 }}>Connecting video...</div>
+                <div style={{ fontSize: 12, opacity: 0.4 }}>Connecting video...</div>
               </div>
             )}
+
+            {/* Opponent overlays */}
             <div style={{
               position: "absolute", top: 10, left: 12,
-              fontSize: 11, fontWeight: 700, opacity: 0.6, letterSpacing: 1,
-            }}>OPPONENT</div>
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, letterSpacing: 1 }}>
+                OPPONENT
+              </span>
+              {/* Speaking indicator */}
+              {oppSpeaking && (
+                <div style={{
+                  display: "flex", gap: 2, alignItems: "flex-end", height: 14,
+                }}>
+                  {[4, 8, 6, 10, 5].map((h, i) => (
+                    <div key={i} style={{
+                      width: 3, height: h, borderRadius: 2,
+                      background: "#00ff88",
+                      animation: `bar ${0.4 + i * 0.1}s ease-in-out infinite alternate`,
+                    }} />
+                  ))}
+                </div>
+              )}
+            </div>
             <div style={{
               position: "absolute", top: 10, right: 12,
               fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 700,
@@ -518,8 +621,7 @@ export default function LobbyClient({ roomId }: Props) {
           {/* Bottom — YOU */}
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
             <video
-              ref={setLocalVideoRef}
-              playsInline muted autoPlay
+              ref={setLocalVideoRef} playsInline muted autoPlay
               style={{
                 width: "100%", height: "100%",
                 objectFit: "cover", transform: "scaleX(-1)",
@@ -527,21 +629,32 @@ export default function LobbyClient({ roomId }: Props) {
             />
             <div style={{
               position: "absolute", inset: 0, pointerEvents: "none",
-              background: "linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.85) 100%)",
+              background: "linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.88) 100%)",
             }} />
+
+            {/* YOU label */}
             <div style={{
               position: "absolute", top: 10, left: 12,
               fontSize: 11, fontWeight: 700, letterSpacing: 1,
             }}>YOU</div>
-            <div style={{
-              position: "absolute", top: 10, right: 12,
-              fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 700,
-              background: myReady ? "rgba(0,255,136,0.2)" : "rgba(0,0,0,0.5)",
-              color: myReady ? "#00ff88" : "rgba(255,255,255,0.4)",
-              border: `1px solid ${myReady ? "rgba(0,255,136,0.4)" : "rgba(255,255,255,0.1)"}`,
-            }}>
-              {myReady ? "✓ READY" : "not ready"}
-            </div>
+
+            {/* Mute button — top right */}
+            <button
+              onClick={toggleMute}
+              style={{
+                position: "absolute", top: 8, right: 12,
+                padding: "6px 12px", borderRadius: 20,
+                border: `1px solid ${isMuted ? "rgba(255,34,68,0.5)" : "rgba(255,255,255,0.15)"}`,
+                background: isMuted ? "rgba(255,34,68,0.15)" : "rgba(0,0,0,0.5)",
+                color: isMuted ? "#ff4466" : "rgba(255,255,255,0.7)",
+                fontSize: 12, fontWeight: 700, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 5,
+                backdropFilter: "blur(8px)",
+              }}>
+              {isMuted ? "🔇 MUTED" : "🎙️ MIC ON"}
+            </button>
+
+            {/* Bottom controls */}
             <div style={{
               position: "absolute", bottom: 0, left: 0, right: 0,
               padding: "10px 16px 20px",
@@ -558,6 +671,7 @@ export default function LobbyClient({ roomId }: Props) {
                   {lobbyTimer}s
                 </div>
               </div>
+
               <button
                 onClick={handleReady}
                 disabled={myReady}
@@ -620,6 +734,13 @@ export default function LobbyClient({ roomId }: Props) {
           </button>
         </div>
       )}
+
+      <style>{`
+        @keyframes bar {
+          from { transform: scaleY(0.4); }
+          to   { transform: scaleY(1.2); }
+        }
+      `}</style>
     </div>
   );
 }
