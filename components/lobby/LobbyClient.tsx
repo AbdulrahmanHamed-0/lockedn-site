@@ -112,11 +112,11 @@ export default function LobbyClient({ roomId }: Props) {
     } catch {
       // Fallback to video only if mic denied
       try {
-        const videoOnly = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 },
-                   frameRate: { ideal:  }, facingMode: "user" },
-          audio: false,
-        });
+     const videoOnly = await navigator.mediaDevices.getUserMedia({
+  video: { width: { ideal: 640 }, height: { ideal: 480 },
+           frameRate: { ideal: 15 }, facingMode: "user" },
+  audio: false,
+});
         streamRef.current = videoOnly;
         const vid = localVideoRef.current;
         if (vid) {
