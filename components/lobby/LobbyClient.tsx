@@ -60,17 +60,20 @@ export default function LobbyClient({ roomId }: Props) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 },
                  frameRate: { ideal: 15 }, facingMode: "user" },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
+        : {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 48000,
+      channelCount: 1,
+      latency: 0,
         },
       });
 
       streamRef.current = stream;
 
       // Save mic track reference for mute toggle
-      const micTrack = stream.getAudioTracks()[0];
+      const micTrack = stream.getTracks()[0];
       if (micTrack) micTrackRef.current = micTrack;
 
       // Attach video to local preview (muted — we don't want to hear ourselves)
@@ -87,12 +90,12 @@ export default function LobbyClient({ roomId }: Props) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Permission denied";
       // If mic denied but camera ok, try camera only
-      if (msg.toLowerCase().includes("audio") || msg.toLowerCase().includes("microphone")) {
+      if (msg.toLowerCase().includes("") || msg.toLowerCase().includes("microphone")) {
         try {
           const videoOnly = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 },
                      frameRate: { ideal: 15 }, facingMode: "user" },
-            audio: false,
+            : false,
           });
           streamRef.current = videoOnly;
           const vid = localVideoRef.current;
