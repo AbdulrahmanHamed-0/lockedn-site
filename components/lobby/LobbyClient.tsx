@@ -93,9 +93,9 @@ audio: {
       if (msg.toLowerCase().includes("") || msg.toLowerCase().includes("microphone")) {
         try {
           const videoOnly = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 },
-                     frameRate: { ideal: 15 }, facingMode: "user" },
-            : false,
+          video: { width: { ideal: 640 }, height: { ideal: 480 },
+                 frameRate: { ideal: 15 }, facingMode: "user" },
+          audio: false,
           });
           streamRef.current = videoOnly;
           const vid = localVideoRef.current;
