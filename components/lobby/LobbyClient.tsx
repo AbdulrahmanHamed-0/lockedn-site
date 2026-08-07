@@ -112,11 +112,11 @@ export default function LobbyClient({ roomId }: Props) {
     } catch {
       // Fallback to video only if mic denied
       try {
-     const videoOnly = await navigator.mediaDevices.getUserMedia({
-  video: { width: { ideal: 640 }, height: { ideal: 480 },
-           frameRate: { ideal: 15 }, facingMode: "user" },
-  audio: false,
-});
+        const videoOnly = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 },
+                   frameRate: { ideal: 15 }, facingMode: "user" },
+          audio: false,
+        });
         streamRef.current = videoOnly;
         const vid = localVideoRef.current;
         if (vid) {
@@ -589,7 +589,7 @@ export default function LobbyClient({ roomId }: Props) {
             }}>{inviteUrl}</div>
             <button onClick={copyInvite} style={{
               width: "100%", padding: "13px 0", borderRadius: 12,
-              background: copied ? "rgba(0,255,136,0.)" : "#00ff88",
+              background: copied ? "rgba(0,255,136,0.15)" : "#00ff88",
               color: copied ? "#00ff88" : "#000",
               fontSize: 14, fontWeight: 900, cursor: "pointer",
               border: copied ? "1px solid #00ff88" : "none",
@@ -677,8 +677,8 @@ export default function LobbyClient({ roomId }: Props) {
             <button onClick={toggleMute} style={{
               position: "absolute", top: 8, right: 12,
               padding: "6px 12px", borderRadius: 20, cursor: "pointer",
-              border: `1px solid ${isMuted ? "rgba(255,34,68,0.5)" : "rgba(255,255,255,0.)"}`,
-              background: isMuted ? "rgba(255,34,68,0.)" : "rgba(0,0,0,0.5)",
+              border: `1px solid ${isMuted ? "rgba(255,34,68,0.5)" : "rgba(255,255,255,0.15)"}`,
+              background: isMuted ? "rgba(255,34,68,0.15)" : "rgba(0,0,0,0.5)",
               color: isMuted ? "#ff4466" : "rgba(255,255,255,0.7)",
               fontSize: 12, fontWeight: 700,
               display: "flex", alignItems: "center", gap: 5,
@@ -709,7 +709,7 @@ export default function LobbyClient({ roomId }: Props) {
                 fontWeight: 900, fontSize: 15,
                 cursor: myReady ? "default" : "pointer",
                 background: myReady
-                  ? "rgba(0,255,136,0.)"
+                  ? "rgba(0,255,136,0.15)"
                   : "linear-gradient(135deg, #00ff88, #00ccff)",
                 color: myReady ? "#00ff88" : "#000",
                 border: myReady ? "1px solid rgba(0,255,136,0.3)" : "none",
