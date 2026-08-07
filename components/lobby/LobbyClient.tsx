@@ -706,7 +706,7 @@ export default function LobbyClient({ roomId }: Props) {
               </div>
               <button onClick={handleReady} disabled={myReady} style={{
                 width: "100%", padding: "14px 0", borderRadius: 14,
-                fontWeight: 900, fontSize: ,
+                fontWeight: 900, fontSize: 15,
                 cursor: myReady ? "default" : "pointer",
                 background: myReady
                   ? "rgba(0,255,136,0.)"
