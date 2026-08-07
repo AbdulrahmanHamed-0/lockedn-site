@@ -60,13 +60,13 @@ export default function LobbyClient({ roomId }: Props) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 },
                  frameRate: { ideal: 15 }, facingMode: "user" },
-        : {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      sampleRate: 48000,
-      channelCount: 1,
-      latency: 0,
+audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1,
+          latency: 0,
         },
       });
 
