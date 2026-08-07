@@ -66,7 +66,6 @@ audio: {
           autoGainControl: true,
           sampleRate: 48000,
           channelCount: 1,
-          latency: 0,
         },
       });
 
