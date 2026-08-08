@@ -291,12 +291,12 @@ export default function BattleClient({ roomId }: Props) {
 
         // Calculate remaining time from started_at
         if (room.started_at) {
-          const elapsedMs = Date.now() - new Date(room.started_at).getTime();
+          const elapsedMs  = Date.now() - new Date(room.started_at).getTime();
           const elapsedSec = elapsedMs / 1000;
           const remaining  = BATTLE_DURATION_SEC - elapsedSec;
 
           if (remaining <= 0) {
-            // Time ran out while refreshing → go to results
+            // Time genuinely ran out → results
             setFinalReps(myScore);
             setFinalOpp(oppScoreVal);
             screenRef.current = "results";
@@ -304,15 +304,27 @@ export default function BattleClient({ roomId }: Props) {
             return;
           }
 
-          // Rewind battleStart so timer shows correct remaining time
-          battleStartRef.current = performance.now() - (elapsedSec * 1000);
-          setBattleTime(Math.ceil(remaining));
+          // If remaining > 25s this is likely a FRESH join (guest joining at start)
+          // not a mid-battle refresh — start from full duration to avoid
+          // clock drift issues between phones
+          if (remaining > BATTLE_DURATION_SEC - 5) {
+            // Fresh join — start from scratch, don't rewind
+            battleStartRef.current = performance.now();
+            setBattleTime(BATTLE_DURATION_SEC);
+          } else {
+            // Genuine mid-battle refresh — rewind timer
+            battleStartRef.current = performance.now() - (elapsedSec * 1000);
+            setBattleTime(Math.ceil(remaining));
+          }
+        } else {
+          // No started_at yet — treat as fresh
+          battleStartRef.current = performance.now();
+          setBattleTime(BATTLE_DURATION_SEC);
         }
 
         endedRef.current  = false;
         screenRef.current = "battle";
         setScreen("battle");
-        // Start camera and resume battle loop
         await startCamera();
         return;
       }
