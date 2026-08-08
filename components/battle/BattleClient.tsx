@@ -1,5 +1,6 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -284,6 +285,11 @@ export default function BattleClient({ roomId }: Props) {
       if (room.status === "battle") {
         // Check if this is a fresh arrival from lobby or a mid-battle refresh
         const isFresh = new URLSearchParams(window.location.search).get("fresh") === "1";
+        // Immediately remove ?fresh=1 from URL so a browser refresh
+        // won't be mistaken for a fresh lobby arrival
+        if (isFresh && typeof window !== "undefined") {
+          window.history.replaceState({}, "", `/battle/${roomId}`);
+        }
 
         if (isFresh) {
           // ── Fresh arrival from lobby → go through setup first ────
