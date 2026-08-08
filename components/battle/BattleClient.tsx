@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -281,22 +280,35 @@ export default function BattleClient({ roomId }: Props) {
         return; // no camera needed
       }
 
-      // ── CASE 2: Battle is live → resume mid-battle
+      // ── CASE 2: Battle is live ───────────────────────────────────
       if (room.status === "battle") {
-        // Restore my score from Supabase
+        // Check if this is a fresh arrival from lobby or a mid-battle refresh
+        const isFresh = new URLSearchParams(window.location.search).get("fresh") === "1";
+
+        if (isFresh) {
+          // ── Fresh arrival from lobby → go through setup first ────
+          // The lobby already ran the countdown — player needs to get
+          // into position before reps count. Don't skip setup.
+          setOppScore(oppScoreVal);
+          screenRef.current = "setup";
+          setScreen("setup");
+          await startCamera();
+          return;
+        }
+
+        // ── Genuine mid-battle refresh → restore and resume ──────
         repCountRef.current   = myScore;
         lastSyncedRef.current = myScore;
         setRepCount(myScore);
         setOppScore(oppScoreVal);
 
-        // Calculate remaining time from started_at
         if (room.started_at) {
           const elapsedMs  = Date.now() - new Date(room.started_at).getTime();
           const elapsedSec = elapsedMs / 1000;
           const remaining  = BATTLE_DURATION_SEC - elapsedSec;
 
           if (remaining <= 0) {
-            // Time genuinely ran out → results
+            // Time ran out while we were refreshing → results
             setFinalReps(myScore);
             setFinalOpp(oppScoreVal);
             screenRef.current = "results";
@@ -304,20 +316,10 @@ export default function BattleClient({ roomId }: Props) {
             return;
           }
 
-          // If remaining > 25s this is likely a FRESH join (guest joining at start)
-          // not a mid-battle refresh — start from full duration to avoid
-          // clock drift issues between phones
-          if (remaining > BATTLE_DURATION_SEC - 5) {
-            // Fresh join — start from scratch, don't rewind
-            battleStartRef.current = performance.now();
-            setBattleTime(BATTLE_DURATION_SEC);
-          } else {
-            // Genuine mid-battle refresh — rewind timer
-            battleStartRef.current = performance.now() - (elapsedSec * 1000);
-            setBattleTime(Math.ceil(remaining));
-          }
+          // Rewind battle timer to correct remaining time
+          battleStartRef.current = performance.now() - (elapsedSec * 1000);
+          setBattleTime(Math.ceil(remaining));
         } else {
-          // No started_at yet — treat as fresh
           battleStartRef.current = performance.now();
           setBattleTime(BATTLE_DURATION_SEC);
         }
