@@ -25,7 +25,7 @@ function clearSession(roomId: string) {
   } catch {}
 }
 
-const LOBBY_DURATION = 30; // seconds
+const LOBBY_DURATION = 15; // seconds
 
 export default function LobbyClient({ roomId }: Props) {
   const router   = useRouter();
@@ -294,7 +294,7 @@ export default function LobbyClient({ roomId }: Props) {
 
     // ── Battle already started → go straight there ───────────────
     if (room.status === "battle") {
-      router.push(`/battle/${roomId}`); return;
+      router.push(`/battle/${roomId}?fresh=1`); return;
     }
     if (room.status === "finished") {
       setError("This match is already over."); setLobbyState("error"); return;
@@ -403,7 +403,7 @@ export default function LobbyClient({ roomId }: Props) {
 
         if (updated.status === "battle") {
           clearSession(roomId);
-          router.push(`/battle/${roomId}`);
+          router.push(`/battle/${roomId}?fresh=1`);
         }
       })
       .subscribe();
@@ -449,7 +449,7 @@ export default function LobbyClient({ roomId }: Props) {
             .update({ status: "battle", started_at: new Date().toISOString() })
             .eq("id", roomId);
         }
-        router.push(`/battle/${roomId}`);
+        router.push(`/battle/${roomId}?fresh=1`);
       }
     }, 1000);
   }
