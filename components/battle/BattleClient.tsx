@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -307,19 +306,15 @@ export default function BattleClient({ roomId }: Props) {
         setRepCount(myScore);
         setOppScore(oppScoreVal);
 
-        // Calculate remaining time — but NEVER jump to results from here.
-        // If status is "battle" in Supabase, the battle is still live.
-        // Only CASE 1 (status === "finished") can show results.
-        let remaining = BATTLE_DURATION_SEC; // safe default
+        // Calculate remaining time — clamp to valid range
+        // so it always restores instead of resetting to 30
+        let remaining = BATTLE_DURATION_SEC;
         if (room.started_at) {
-          const elapsedSec = (Date.now() - new Date(room.started_at).getTime()) / 1000;
-          // Only use the calculated time if it makes sense
-          // (positive and less than battle duration)
-          if (elapsedSec > 0 && elapsedSec < BATTLE_DURATION_SEC) {
-            remaining = BATTLE_DURATION_SEC - elapsedSec;
-          }
-          // If elapsed is negative (clock behind) or > duration (clock ahead),
-          // just use full battle time. Better to have extra time than no battle.
+          const startMs    = new Date(room.started_at).getTime();
+          const elapsedSec = (Date.now() - startMs) / 1000;
+          // Clamp: at least 1 second (so it doesn't end instantly),
+          // at most BATTLE_DURATION_SEC (if clock is behind)
+          remaining = Math.max(1, Math.min(BATTLE_DURATION_SEC, BATTLE_DURATION_SEC - elapsedSec));
         }
 
         battleStartRef.current = performance.now() - ((BATTLE_DURATION_SEC - remaining) * 1000);
