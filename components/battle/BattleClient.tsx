@@ -293,8 +293,6 @@ export default function BattleClient({ roomId }: Props) {
 
         if (isFresh) {
           // ── Fresh arrival from lobby → go through setup first ────
-          // The lobby already ran the countdown — player needs to get
-          // into position before reps count. Don't skip setup.
           setOppScore(oppScoreVal);
           screenRef.current = "setup";
           setScreen("setup");
@@ -303,32 +301,29 @@ export default function BattleClient({ roomId }: Props) {
         }
 
         // ── Genuine mid-battle refresh → restore and resume ──────
+        // Reps restored from Supabase (single source of truth)
         repCountRef.current   = myScore;
         lastSyncedRef.current = myScore;
         setRepCount(myScore);
         setOppScore(oppScoreVal);
 
+        // Calculate remaining time — but NEVER jump to results from here.
+        // If status is "battle" in Supabase, the battle is still live.
+        // Only CASE 1 (status === "finished") can show results.
+        let remaining = BATTLE_DURATION_SEC; // safe default
         if (room.started_at) {
-          const elapsedMs  = Date.now() - new Date(room.started_at).getTime();
-          const elapsedSec = elapsedMs / 1000;
-          const remaining  = BATTLE_DURATION_SEC - elapsedSec;
-
-          if (remaining <= 0) {
-            // Time ran out while we were refreshing → results
-            setFinalReps(myScore);
-            setFinalOpp(oppScoreVal);
-            screenRef.current = "results";
-            setScreen("results");
-            return;
+          const elapsedSec = (Date.now() - new Date(room.started_at).getTime()) / 1000;
+          // Only use the calculated time if it makes sense
+          // (positive and less than battle duration)
+          if (elapsedSec > 0 && elapsedSec < BATTLE_DURATION_SEC) {
+            remaining = BATTLE_DURATION_SEC - elapsedSec;
           }
-
-          // Rewind battle timer to correct remaining time
-          battleStartRef.current = performance.now() - (elapsedSec * 1000);
-          setBattleTime(Math.ceil(remaining));
-        } else {
-          battleStartRef.current = performance.now();
-          setBattleTime(BATTLE_DURATION_SEC);
+          // If elapsed is negative (clock behind) or > duration (clock ahead),
+          // just use full battle time. Better to have extra time than no battle.
         }
+
+        battleStartRef.current = performance.now() - ((BATTLE_DURATION_SEC - remaining) * 1000);
+        setBattleTime(Math.ceil(remaining));
 
         endedRef.current  = false;
         screenRef.current = "battle";
