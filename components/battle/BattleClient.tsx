@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -10,7 +9,7 @@ import type { PoseLandmarker as PoseLandmarkerType } from "@mediapipe/tasks-visi
 
 interface Props { roomId: string; }
 
-type AppScreen   = "loading" | "getready" | "battle" | "results";
+type AppScreen   = "loading" | "setup" | "countdown" | "battle" | "calculating" | "results";
 type PushupPhase = "no_plank"|"top"|"descending"|"bottom"|"ascending";
 
 const MODEL_PATH            = "/models/pose_landmarker_lite.task";
@@ -28,7 +27,6 @@ const KNEE_STRAIGHT_MIN     = 140;
 const STAND_UP_VERTICAL     = 0.40;
 const VIS_MIN               = 0.40;
 const SYNC_EVERY_N_REPS     = 1;
-const GET_READY_SEC = 15;
 
 const LM = {
   LEFT_SHOULDER:11, RIGHT_SHOULDER:12, LEFT_ELBOW:13,  RIGHT_ELBOW:14,
@@ -150,7 +148,7 @@ export default function BattleClient({ roomId }: Props) {
   const [checks,     setChecks]     = useState<CheckResult[]>([]);
   const [countdown,  setCountdown]  = useState(5);
   const [battleTime, setBattleTime] = useState(BATTLE_DURATION_SEC);
-  const [readyCount, setReadyCount] = useState(GET_READY_SEC);
+  const [posHoldPct, setPosHoldPct] = useState(0);
   const [finalReps,  setFinalReps]  = useState(0);
   const [finalOpp,   setFinalOpp]   = useState<number|null>(null);
 
@@ -192,23 +190,16 @@ export default function BattleClient({ roomId }: Props) {
   }
 
   // ── Screen transitions ───────────────────────────────────────────
-function startGetReady() {
-    screenRef.current = "getready";
-    setScreen("getready");
-    speak("Both players, get your ass into pushup position!");
-    let n = GET_READY_SEC;
-    setReadyCount(n);
-    const tick = setInterval(() => {
-      n--;
-      setReadyCount(n);
-      if (n === 10) speak("10 seconds!", 1.0);
-      if (n === 5)  speak("5!", 1.1);
-      if (n === 4)  speak("4!", 1.1);
-      if (n === 3)  speak("3!", 1.1);
-      if (n === 2)  speak("2!", 1.1);
-      if (n === 1)  speak("1!", 1.2);
-      if (n <= 0) { clearInterval(tick); speak("GO!", 1.3); beginBattle(); }
-    }, 1000);
+  function beginCountdown() {
+    screenRef.current = "countdown";
+    setScreen("countdown");
+    speak("Both players, get your ass into pushup position! Five...");
+    let n=5; setCountdown(n);
+    const tick = setInterval(()=>{
+      n--; setCountdown(n);
+      if (n>0) speak(String(n), 0.9);
+      if (n<=0){ clearInterval(tick); speak("GO!",1.3); beginBattle(); }
+    }, 1100);
   }
 
   function beginBattle() {
@@ -227,19 +218,17 @@ function startGetReady() {
     if (endedRef.current) return;
     endedRef.current = true;
 
-    const myReps   = forcedReps ?? repCountRef.current;
-    const oppFinal = forcedOpp  ?? oppScore;
-
-    screenRef.current = "results";
-    setScreen("results");
-    setFinalReps(myReps);
-    setFinalOpp(oppFinal ?? null);
+    const myReps = forcedReps ?? repCountRef.current;
     window.speechSynthesis?.cancel();
 
-    // Final sync to Supabase
+    // ── Step 1: Show "calculating" buffer screen immediately ─────
+    screenRef.current = "calculating";
+    setScreen("calculating");
+
+    // ── Step 2: Sync my final score to Supabase ──────────────────
     await syncScore(myReps);
 
-    // Host writes final result
+    // ── Step 3: Host writes match result ─────────────────────────
     if (isHostRef.current) {
       const { data } = await supabase
         .from("rooms").select("*").eq("id", roomId).single();
@@ -258,9 +247,31 @@ function startGetReady() {
       }
     }
 
-    if (myReps>=20)      speak(`BEAST MODE! ${myReps} reps!`,1.1);
-    else if (myReps>=10) speak(`${myReps} reps! Not bad!`,1.0);
-    else                 speak(`${myReps} reps. Run it back!`,0.95);
+    // ── Step 4: Wait 5 seconds so both phones finish syncing ──────
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // ── Step 5: Fetch FRESH scores from Supabase ─────────────────
+    // This guarantees we show the opponent's actual final score
+    // regardless of which phone finished first
+    const { data: freshRoom } = await supabase
+      .from("rooms").select("*").eq("id", roomId).single();
+
+    const freshMyReps  = freshRoom
+      ? (isHostRef.current ? freshRoom.host_score : freshRoom.guest_score)
+      : myReps;
+    const freshOppReps = freshRoom
+      ? (isHostRef.current ? freshRoom.guest_score : freshRoom.host_score)
+      : (forcedOpp ?? null);
+
+    // ── Step 6: Show results with accurate scores ─────────────────
+    screenRef.current = "results";
+    setScreen("results");
+    setFinalReps(freshMyReps);
+    setFinalOpp(freshOppReps);
+
+    if (freshMyReps>=20)      speak(`BEAST MODE! ${freshMyReps} reps!`,1.1);
+    else if (freshMyReps>=10) speak(`${freshMyReps} reps! Not bad!`,1.0);
+    else                      speak(`${freshMyReps} reps. Run it back!`,0.95);
   }
 
   // ── Main init: read Supabase, determine correct screen ───────────
@@ -299,10 +310,12 @@ function startGetReady() {
           window.history.replaceState({}, "", `/battle/${roomId}`);
         }
 
- if (isFresh) {
+        if (isFresh) {
+          // ── Fresh arrival from lobby → go through setup first ────
           setOppScore(oppScoreVal);
+          screenRef.current = "setup";
+          setScreen("setup");
           await startCamera();
-          startGetReady();
           return;
         }
 
@@ -335,9 +348,10 @@ function startGetReady() {
       }
 
       // ── CASE 3: Everything else → normal setup flow
-    setOppScore(oppScoreVal);
+      setOppScore(oppScoreVal);
+      screenRef.current = "setup";
+      setScreen("setup");
       await startCamera();
-      startGetReady();
     }
 
     init();
@@ -385,6 +399,13 @@ function startGetReady() {
 
     const cur = screenRef.current;
 
+    if (cur==="setup") {
+      if (nowOk){ posHoldRef.current=Math.min(posHoldRef.current+1,POSITION_HOLD_FRAMES); }
+      else      { posHoldRef.current=Math.max(posHoldRef.current-2,0); }
+      setPosHoldPct(Math.round((posHoldRef.current/POSITION_HOLD_FRAMES)*100));
+      if (posHoldRef.current>=POSITION_HOLD_FRAMES){ posHoldRef.current=0; beginCountdown(); }
+      return;
+    }
 
     if (cur==="battle") {
       const elapsed   = (performance.now()-battleStartRef.current)/1000;
@@ -468,7 +489,7 @@ function startGetReady() {
       if (now-lastDetectRef.current>=DETECTION_INTERVAL_MS){
         lastDetectRef.current=now;
         const cur=screenRef.current;
-       if (cur==="results"||cur==="loading"||cur==="getready"){
+        if (cur==="results"||cur==="loading"||cur==="countdown"||cur==="calculating"){
           rafRef.current=requestAnimationFrame(loop); return;
         }
         const result=detector.detectForVideo(video,now);
@@ -519,61 +540,111 @@ function startGetReady() {
       )}
 
       {/* Video + canvas — only for setup/battle screens */}
-      <video ref={videoRef} playsInline muted autoPlay style={{
-        position:"absolute",inset:0,width:"100%",height:"100%",
-        objectFit:"cover",transform:"scaleX(-1)",
-        opacity:(screen==="getready"||screen==="battle")?1:0,
-        pointerEvents:"none",
-      }}/>
-      <canvas ref={canvasRef} style={{
-        position:"absolute",inset:0,width:"100%",height:"100%",
-        transform:"scaleX(-1)",
-        opacity:screen==="battle"?1:0,
-        pointerEvents:"none",
-      }}/>
-      {(screen==="getready"||screen==="battle")&&(
-        <div style={{
-          position:"absolute",inset:0,pointerEvents:"none",
-          background:"linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 35%,transparent 60%,rgba(0,0,0,0.7) 100%)",
-        }}/>
+      {(screen==="setup"||screen==="battle"||screen==="countdown")&&(
+        <>
+          <video ref={videoRef} playsInline muted autoPlay style={{
+            position:"absolute",inset:0,width:"100%",height:"100%",
+            objectFit:"cover",transform:"scaleX(-1)",
+          }}/>
+          <canvas ref={canvasRef} style={{
+            position:"absolute",inset:0,width:"100%",height:"100%",
+            transform:"scaleX(-1)",
+          }}/>
+          <div style={{
+            position:"absolute",inset:0,pointerEvents:"none",
+            background:"linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 35%,transparent 60%,rgba(0,0,0,0.7) 100%)",
+          }}/>
+        </>
       )}
 
-
-    
-      {/* COUNTDOWN */}
-   {screen === "getready" && (
+      {/* SETUP */}
+      {screen==="setup"&&(
         <div style={{
-          position:"absolute", inset:0,
-          display:"flex", flexDirection:"column",
-          alignItems:"center", justifyContent:"center",
+          position:"absolute",inset:0,display:"flex",
+          flexDirection:"column",justifyContent:"space-between",padding:20,
         }}>
-          <div style={{
-            position:"absolute", inset:0,
-            background:"rgba(0,0,0,0.75)", zIndex:0,
-          }}/>
-          <div style={{ position:"relative", zIndex:1, textAlign:"center" }}>
-            <div style={{
-              fontSize:14, letterSpacing:4, opacity:0.5,
-              fontWeight:700, marginBottom:8,
-            }}>GET INTO POSITION</div>
-            <div style={{
-              fontSize: readyCount <= 5 ? 120 : 100,
-              fontWeight:900, letterSpacing:-6, lineHeight:1,
-              color: readyCount <= 5 ? "#ff6644" : readyCount <= 10 ? "#ffcc00" : "white",
-              textShadow: readyCount <= 3 ? "0 0 40px #ff664488" : "none",
-              transition:"all 0.2s",
-            }}>{readyCount}</div>
-            <div style={{ fontSize:13, opacity:0.4, marginTop:12 }}>
-              {readyCount > 10 ? "Set up your phone sideways" :
-               readyCount > 5  ? "Get into pushup position" :
-               "Starting soon..."}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:22,fontWeight:900,letterSpacing:-1}}>
+                LOCKED&apos;N<span style={{color:"#00ff88"}}>.</span>
+              </div>
+              <div style={{fontSize:11,opacity:0.4,marginTop:2}}>GET IN POSITION</div>
             </div>
             <div style={{
-              marginTop:24, fontSize:12, opacity:0.3,
-              maxWidth:280, lineHeight:1.6,
+              padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,
+              background:positionOk?"rgba(0,255,136,0.15)":"rgba(255,34,68,0.15)",
+              border:`1px solid ${positionOk?"#00ff88":"#ff2244"}`,
+              color:positionOk?"#00ff88":"#ff2244",
             }}>
-              Position your phone so your full body is visible from the side.
+              {positionOk?"● VALID":"● FIX POSITION"}
             </div>
+          </div>
+          <div style={{
+            background:"rgba(0,0,0,0.7)",borderRadius:16,padding:16,
+            backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.08)",
+          }}>
+            <div style={{fontSize:11,opacity:0.4,letterSpacing:2,marginBottom:10}}>
+              POSITION CHECK
+            </div>
+            {checks.map((c,i)=>(
+              <div key={i} style={{
+                display:"flex",alignItems:"center",gap:10,padding:"6px 0",
+                borderBottom:i<checks.length-1?"1px solid rgba(255,255,255,0.06)":"none",
+              }}>
+                <span style={{fontSize:16}}>{c.pass?"✅":"❌"}</span>
+                <span style={{fontSize:13,fontWeight:700,flex:1,
+                              color:c.pass?"#00ff88":"#ff4466"}}>{c.label}</span>
+                <span style={{fontSize:11,opacity:0.5}}>{c.value}</span>
+              </div>
+            ))}
+            {checks.length===0&&(
+              <div style={{opacity:0.4,fontSize:13,textAlign:"center",padding:"8px 0"}}>
+                Point camera sideways at your full body
+              </div>
+            )}
+            {positionOk&&(
+              <div style={{marginTop:14}}>
+                <div style={{
+                  display:"flex",justifyContent:"space-between",
+                  fontSize:11,opacity:0.6,marginBottom:6,
+                }}>
+                  <span>Hold position...</span><span>{posHoldPct}%</span>
+                </div>
+                <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.1)",overflow:"hidden"}}>
+                  <div style={{
+                    height:"100%",borderRadius:3,width:`${posHoldPct}%`,
+                    background:"linear-gradient(90deg,#00ff88,#00ccff)",transition:"width 0.15s",
+                  }}/>
+                </div>
+                <div style={{fontSize:11,opacity:0.4,marginTop:6,textAlign:"center"}}>
+                  Starting automatically...
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{alignSelf:"flex-end",opacity:0.3,fontSize:11}}>
+            {fps}fps · {landmarks}/33
+          </div>
+        </div>
+      )}
+
+      {/* COUNTDOWN */}
+      {screen==="countdown"&&(
+        <div style={{
+          position:"absolute",inset:0,background:"rgba(0,0,0,0.85)",
+          display:"flex",flexDirection:"column",
+          alignItems:"center",justifyContent:"center",gap:20,
+        }}>
+          <div style={{fontSize:14,letterSpacing:4,opacity:0.5,fontWeight:700}}>GET READY</div>
+          <div style={{
+            fontSize:countdown===0?80:140,fontWeight:900,letterSpacing:-6,lineHeight:1,
+            color:countdown===0?"#00ff88":countdown<=2?"#ff6644":"white",
+            textShadow:countdown===0?"0 0 60px #00ff8888":"none",transition:"all 0.15s",
+          }}>
+            {countdown===0?"GO!":countdown}
+          </div>
+          <div style={{fontSize:13,opacity:0.4}}>
+            {countdown>0?`${BATTLE_DURATION_SEC}s pushup battle`:""}
           </div>
         </div>
       )}
@@ -643,6 +714,64 @@ function startGetReady() {
               }}>END</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CALCULATING — 5 second buffer between battle and results */}
+      {screen==="calculating"&&(
+        <div style={{
+          position:"absolute",inset:0,
+          background:"linear-gradient(160deg,#0a0a0a 0%,#0d1a0f 50%,#0a0a0a 100%)",
+          display:"flex",flexDirection:"column",
+          alignItems:"center",justifyContent:"center",gap:24,
+        }}>
+          <div style={{fontSize:16,fontWeight:900,opacity:0.4}}>
+            LOCKED&apos;N<span style={{color:"#00ff88"}}>.</span>
+          </div>
+
+          {/* Animated dots */}
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            {[0,1,2,3,4].map(i=>(
+              <div key={i} style={{
+                width:10, height:10, borderRadius:"50%",
+                background:"#00ff88",
+                animation:`calcPulse 1s ${i*0.15}s ease-in-out infinite alternate`,
+              }}/>
+            ))}
+          </div>
+
+          <div style={{textAlign:"center"}}>
+            <div style={{
+              fontSize:18, fontWeight:900, letterSpacing:2,
+              color:"white", marginBottom:8,
+            }}>
+              CALCULATING RESULTS
+            </div>
+            <div style={{fontSize:13,opacity:0.4}}>
+              Syncing final scores...
+            </div>
+          </div>
+
+          {/* Show my score while waiting */}
+          <div style={{
+            padding:"16px 32px", borderRadius:16,
+            background:"rgba(255,255,255,0.04)",
+            border:"1px solid rgba(255,255,255,0.08)",
+            textAlign:"center",
+          }}>
+            <div style={{fontSize:11,opacity:0.4,letterSpacing:2,marginBottom:6}}>YOUR REPS</div>
+            <div style={{
+              fontSize:60,fontWeight:900,letterSpacing:-3,
+              color:"#00ff88",lineHeight:1,
+            }}>{repCount}</div>
+          </div>
+
+          <style>{`
+            @keyframes calcPulse {
+              from { opacity:0.2; transform:scale(0.7); }
+              to   { opacity:1;   transform:scale(1.2); }
+            }
+          `}</style>
         </div>
       )}
 
