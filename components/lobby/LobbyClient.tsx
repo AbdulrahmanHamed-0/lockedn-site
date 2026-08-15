@@ -109,40 +109,52 @@ export default function LobbyClient({ roomId }: Props) {
         vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
       }
 
- // Notify Supabase that this player resolved their camera issue
       try {
         await supabase.from("rooms")
           .update({ [`${isHostRef.current ? "host" : "guest"}_camera_ok`]: true })
           .eq("id", roomId);
-      } catch {} // fire and forget, column may not exist yet — that's ok
+      } catch {} // fire and forget
 
       setLobbyState("connecting");
       await initRoom();
-    } catch {
-      // Fallback to video only if mic denied
+    } catch (err) {
+      // ── Smart permission detection ────────────────────────────────
+      // Check if permanently blocked (browser won't show prompt again)
+      // vs just denied once (browser will re-prompt)
+      let isPermanentlyBlocked = false;
       try {
-        const videoOnly = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 },
-                   frameRate: { ideal: 15 }, facingMode: "user" },
-          audio: false,
-        });
-        streamRef.current = videoOnly;
-        const vid = localVideoRef.current;
-        if (vid) {
-          vid.srcObject = videoOnly;
-          vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+        const camPerm = await navigator.permissions
+          .query({ name: "camera" as PermissionName });
+        isPermanentlyBlocked = camPerm.state === "denied";
+      } catch {
+        // Permissions API not available — use error name as fallback
+        const errorName = err instanceof Error ? err.name : "";
+        isPermanentlyBlocked = errorName === "NotAllowedError";
+      }
+
+      if (isPermanentlyBlocked) {
+        // Permanently blocked — show settings guide, no point retrying
+        setCameraErr("blocked");
+      } else {
+        // Not blocked — try video only as fallback (mic might be denied only)
+        try {
+          const videoOnly = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 },
+                     frameRate: { ideal: 15 }, facingMode: "user" },
+            audio: false,
+          });
+          streamRef.current = videoOnly;
+          const vid = localVideoRef.current;
+          if (vid) {
+            vid.srcObject = videoOnly;
+            vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+          }
+          setLobbyState("connecting");
+          await initRoom();
+        } catch {
+          // Camera also denied — show retry
+          setCameraErr("denied");
         }
-        setLobbyState("connecting");
-        await initRoom();
-      } catch (err2) {
-        const msg = err2 instanceof Error ? err2.message : "Permission denied";
-        setCameraErr(
-          msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
-            ? "Camera permission denied. Please allow camera access and try again."
-            : "Could not access camera: " + msg
-        );
-        // Tell opponent we're having camera issues
-        setOppCameraIssue(false); // this is MY issue, not theirs
       }
     }
   }, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -580,46 +592,75 @@ export default function LobbyClient({ roomId }: Props) {
           alignItems: "center", justifyContent: "center",
           padding: 32, gap: 20, textAlign: "center",
         }}>
-          <div style={{ fontSize: 52 }}>📷🎙️</div>
+          <div style={{ fontSize: 52 }}>
+            {cameraErr === "blocked" ? "🔒" : "📷🎙️"}
+          </div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
-              {cameraErr ? "Permission Needed" : "Camera & Mic Required"}
+              {cameraErr === "blocked" ? "Camera Blocked"
+               : cameraErr === "denied" ? "Permission Denied"
+               : "Camera & Mic Required"}
             </div>
             <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.7, maxWidth: 280 }}>
               {cameraErr
-                ? "The room is still open — your opponent is waiting. Fix permissions and rejoin."
+                ? "The room is still open — your opponent is waiting."
                 : "Both players need camera and mic to see and trash talk each other."}
             </div>
           </div>
 
-          {cameraErr && (
+          {/* BLOCKED — show settings guide, no retry button spam */}
+          {cameraErr === "blocked" && (
             <div style={{
-              padding: "14px 16px", borderRadius: 12, fontSize: 12,
-              background: "rgba(255,34,68,0.08)", border: "1px solid rgba(255,34,68,0.25)",
-              color: "#ff6666", maxWidth: 320, lineHeight: 1.7, textAlign: "left",
+              padding: "16px", borderRadius: 14, fontSize: 13,
+              background: "rgba(255,204,0,0.06)",
+              border: "1px solid rgba(255,204,0,0.2)",
+              maxWidth: 320, lineHeight: 1.8, textAlign: "left",
             }}>
-              <div style={{ fontWeight: 700, marginBottom: 6, color: "#ff4466" }}>
-                ❌ {cameraErr}
+              <div style={{ fontWeight: 700, marginBottom: 8, color: "#ffcc00" }}>
+                🔒 Browser has blocked camera access
               </div>
-              <div style={{ opacity: 0.8 }}>
-                <strong>How to fix:</strong><br/>
-                1. Tap the 🔒 lock icon in your browser URL bar<br/>
-                2. Set Camera and Microphone to <strong>Allow</strong><br/>
-                3. Tap Try Again below
+              <div style={{ opacity: 0.8, fontSize: 12 }}>
+                Your browser remembered your denial. To fix it:<br/><br/>
+                <strong>Chrome / Android:</strong><br/>
+                Tap the 🔒 lock in the URL bar → Site settings → Camera → Allow<br/><br/>
+                <strong>Safari / iPhone:</strong><br/>
+                Settings → Safari → Camera → Allow<br/><br/>
+                Then come back and tap the button below.
               </div>
             </div>
           )}
 
+          {/* DENIED ONCE — show simple retry */}
+          {cameraErr === "denied" && (
+            <div style={{
+              padding: "14px 16px", borderRadius: 12, fontSize: 12,
+              background: "rgba(255,34,68,0.08)",
+              border: "1px solid rgba(255,34,68,0.2)",
+              color: "#ff6666", maxWidth: 320, lineHeight: 1.7, textAlign: "left",
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 4, color: "#ff4466" }}>
+                ❌ Camera access was denied
+              </div>
+              <div style={{ opacity: 0.8 }}>
+                Tap Try Again and allow camera access when prompted.
+              </div>
+            </div>
+          )}
+
+          {/* Button — always shown, text changes by state */}
           <button onClick={requestCamera} style={{
             padding: "16px 40px", borderRadius: 14, border: 0,
-            background: cameraErr
+            background: cameraErr === "blocked"
+              ? "#ffcc00"
+              : cameraErr === "denied"
               ? "#ff4466"
               : "linear-gradient(135deg, #00ff88, #00ccff)",
-            color: "#fff",
-            fontSize: 16, fontWeight: 900, cursor: "pointer",
-            letterSpacing: 0.5,
+            color: cameraErr === "blocked" ? "#000" : "#fff",
+            fontSize: 16, fontWeight: 900, cursor: "pointer", letterSpacing: 0.5,
           }}>
-            {cameraErr ? "🔄 Try Again" : "Allow Camera & Mic"}
+            {cameraErr === "blocked" ? "I Fixed It — Try Again"
+             : cameraErr === "denied" ? "🔄 Try Again"
+             : "Allow Camera & Mic"}
           </button>
 
           {!cameraErr && (
@@ -629,10 +670,8 @@ export default function LobbyClient({ roomId }: Props) {
           )}
 
           {cameraErr && (
-            <div style={{
-              fontSize: 12, opacity: 0.4, maxWidth: 280, lineHeight: 1.6,
-            }}>
-              ⏳ Your opponent&apos;s room stays open. Fix permissions and tap Try Again to rejoin — no new link needed.
+            <div style={{ fontSize: 12, opacity: 0.4, maxWidth: 280, lineHeight: 1.6 }}>
+              ⏳ Room stays open. Fix permissions and tap the button to rejoin — no new link needed.
             </div>
           )}
         </div>
@@ -662,10 +701,13 @@ export default function LobbyClient({ roomId }: Props) {
             position: "relative",
           }}>
             <video ref={setLocalVideoRef} playsInline muted autoPlay
-              style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}
+              style={{
+                width: "100%", height: "100%", objectFit: "cover",
+                transform: "scaleX(-1)", pointerEvents: "none",
+              }}
+              onContextMenu={(e) => e.preventDefault()}
             />
             <div style={{
-              position: "absolute", bottom: 10, left: 10,
               background: "rgba(0,0,0,0.7)", borderRadius: 8,
               padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#00ff88",
             }}>YOU</div>
@@ -739,9 +781,10 @@ export default function LobbyClient({ roomId }: Props) {
             <video ref={setRemoteVideoRef} playsInline muted autoPlay
               style={{
                 width: "100%", height: "100%", objectFit: "cover",
-                transform: "scaleX(-1)",
+                transform: "scaleX(-1)", pointerEvents: "none",
                 opacity: remoteReady ? 1 : 0, transition: "opacity 0.5s",
               }}
+              onContextMenu={(e) => e.preventDefault()}
             />
             {!remoteReady && (
               <div style={{
@@ -794,7 +837,11 @@ export default function LobbyClient({ roomId }: Props) {
           {/* Bottom — YOU */}
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
             <video ref={setLocalVideoRef} playsInline muted autoPlay
-              style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}
+              style={{
+                width: "100%", height: "100%", objectFit: "cover",
+                transform: "scaleX(-1)", pointerEvents: "none",
+              }}
+              onContextMenu={(e) => e.preventDefault()}
             />
             <div style={{
               position: "absolute", inset: 0, pointerEvents: "none",
