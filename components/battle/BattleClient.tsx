@@ -1,5 +1,6 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -9,7 +10,7 @@ import type { PoseLandmarker as PoseLandmarkerType } from "@mediapipe/tasks-visi
 
 interface Props { roomId: string; }
 
-type AppScreen   = "loading" | "setup" | "countdown" | "battle" | "calculating" | "results";
+type AppScreen   = "loading" | "getready" | "battle" | "calculating" | "results";
 type PushupPhase = "no_plank"|"top"|"descending"|"bottom"|"ascending";
 
 const MODEL_PATH            = "/models/pose_landmarker_lite.task";
@@ -27,6 +28,7 @@ const KNEE_STRAIGHT_MIN     = 140;
 const STAND_UP_VERTICAL     = 0.40;
 const VIS_MIN               = 0.40;
 const SYNC_EVERY_N_REPS     = 1;
+const GET_READY_SEC         = 15;
 
 const LM = {
   LEFT_SHOULDER:11, RIGHT_SHOULDER:12, LEFT_ELBOW:13,  RIGHT_ELBOW:14,
@@ -148,7 +150,7 @@ export default function BattleClient({ roomId }: Props) {
   const [checks,     setChecks]     = useState<CheckResult[]>([]);
   const [countdown,  setCountdown]  = useState(5);
   const [battleTime, setBattleTime] = useState(BATTLE_DURATION_SEC);
-  const [posHoldPct, setPosHoldPct] = useState(0);
+  const [readyCount, setReadyCount] = useState(GET_READY_SEC);
   const [finalReps,  setFinalReps]  = useState(0);
   const [finalOpp,   setFinalOpp]   = useState<number|null>(null);
 
@@ -189,17 +191,24 @@ export default function BattleClient({ roomId }: Props) {
     await supabase.from("rooms").update({ [field]:reps }).eq("id", roomId);
   }
 
-  // ── Screen transitions ───────────────────────────────────────────
-  function beginCountdown() {
-    screenRef.current = "countdown";
-    setScreen("countdown");
-    speak("Both players, get your ass into pushup position! Five...");
-    let n=5; setCountdown(n);
-    const tick = setInterval(()=>{
-      n--; setCountdown(n);
-      if (n>0) speak(String(n), 0.9);
-      if (n<=0){ clearInterval(tick); speak("GO!",1.3); beginBattle(); }
-    }, 1100);
+  // ── 15s get ready countdown ─────────────────────────────────────
+  function startGetReady() {
+    screenRef.current = "getready";
+    setScreen("getready");
+    speak("Both players, get your ass into pushup position!");
+    let n = GET_READY_SEC;
+    setReadyCount(n);
+    const tick = setInterval(() => {
+      n--;
+      setReadyCount(n);
+      if (n === 10) speak("10 seconds!", 1.0);
+      if (n === 5)  speak("5!", 1.1);
+      if (n === 4)  speak("4!", 1.1);
+      if (n === 3)  speak("3!", 1.1);
+      if (n === 2)  speak("2!", 1.1);
+      if (n === 1)  speak("1!", 1.2);
+      if (n <= 0)   { clearInterval(tick); speak("GO!", 1.3); beginBattle(); }
+    }, 1000);
   }
 
   function beginBattle() {
@@ -311,11 +320,10 @@ export default function BattleClient({ roomId }: Props) {
         }
 
         if (isFresh) {
-          // ── Fresh arrival from lobby → go through setup first ────
+          // Fresh arrival from lobby → 15s get ready countdown
           setOppScore(oppScoreVal);
-          screenRef.current = "setup";
-          setScreen("setup");
           await startCamera();
+          startGetReady();
           return;
         }
 
@@ -347,11 +355,10 @@ export default function BattleClient({ roomId }: Props) {
         return;
       }
 
-      // ── CASE 3: Everything else → normal setup flow
+      // ── CASE 3: Fresh arrival → 15s get ready countdown
       setOppScore(oppScoreVal);
-      screenRef.current = "setup";
-      setScreen("setup");
       await startCamera();
+      startGetReady();
     }
 
     init();
@@ -398,14 +405,6 @@ export default function BattleClient({ roomId }: Props) {
     if (wasOk&&!nowOk){ phaseRef.current="no_plank"; setPhase("no_plank"); }
 
     const cur = screenRef.current;
-
-    if (cur==="setup") {
-      if (nowOk){ posHoldRef.current=Math.min(posHoldRef.current+1,POSITION_HOLD_FRAMES); }
-      else      { posHoldRef.current=Math.max(posHoldRef.current-2,0); }
-      setPosHoldPct(Math.round((posHoldRef.current/POSITION_HOLD_FRAMES)*100));
-      if (posHoldRef.current>=POSITION_HOLD_FRAMES){ posHoldRef.current=0; beginCountdown(); }
-      return;
-    }
 
     if (cur==="battle") {
       const elapsed   = (performance.now()-battleStartRef.current)/1000;
@@ -489,7 +488,7 @@ export default function BattleClient({ roomId }: Props) {
       if (now-lastDetectRef.current>=DETECTION_INTERVAL_MS){
         lastDetectRef.current=now;
         const cur=screenRef.current;
-        if (cur==="results"||cur==="loading"||cur==="countdown"||cur==="calculating"){
+        if (cur==="results"||cur==="loading"||cur==="getready"||cur==="calculating"){
           rafRef.current=requestAnimationFrame(loop); return;
         }
         const result=detector.detectForVideo(video,now);
@@ -539,112 +538,60 @@ export default function BattleClient({ roomId }: Props) {
         </div>
       )}
 
-      {/* Video + canvas — only for setup/battle screens */}
-      {(screen==="setup"||screen==="battle"||screen==="countdown")&&(
-        <>
-          <video ref={videoRef} playsInline muted autoPlay style={{
-            position:"absolute",inset:0,width:"100%",height:"100%",
-            objectFit:"cover",transform:"scaleX(-1)",
-          }}/>
-          <canvas ref={canvasRef} style={{
-            position:"absolute",inset:0,width:"100%",height:"100%",
-            transform:"scaleX(-1)",
-          }}/>
-          <div style={{
-            position:"absolute",inset:0,pointerEvents:"none",
-            background:"linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 35%,transparent 60%,rgba(0,0,0,0.7) 100%)",
-          }}/>
-        </>
+      {/* Video always mounted — stays attached through screen transitions */}
+      <video ref={videoRef} playsInline muted autoPlay style={{
+        position:"absolute",inset:0,width:"100%",height:"100%",
+        objectFit:"cover",transform:"scaleX(-1)",
+        opacity:(screen==="getready"||screen==="battle")?1:0,
+        pointerEvents:"none",
+      }}/>
+      <canvas ref={canvasRef} style={{
+        position:"absolute",inset:0,width:"100%",height:"100%",
+        transform:"scaleX(-1)",
+        opacity:screen==="battle"?1:0,
+        pointerEvents:"none",
+      }}/>
+      {(screen==="getready"||screen==="battle")&&(
+        <div style={{
+          position:"absolute",inset:0,pointerEvents:"none",
+          background:"linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 35%,transparent 60%,rgba(0,0,0,0.7) 100%)",
+        }}/>
       )}
 
-      {/* SETUP */}
-      {screen==="setup"&&(
+      {/* GET READY — 15 second fixed countdown */}
+      {screen==="getready"&&(
         <div style={{
-          position:"absolute",inset:0,display:"flex",
-          flexDirection:"column",justifyContent:"space-between",padding:20,
+          position:"absolute",inset:0,
+          display:"flex",flexDirection:"column",
+          alignItems:"center",justifyContent:"center",
         }}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:22,fontWeight:900,letterSpacing:-1}}>
-                LOCKED&apos;N<span style={{color:"#00ff88"}}>.</span>
-              </div>
-              <div style={{fontSize:11,opacity:0.4,marginTop:2}}>GET IN POSITION</div>
+          <div style={{
+            position:"absolute",inset:0,
+            background:"rgba(0,0,0,0.78)",zIndex:0,
+          }}/>
+          <div style={{position:"relative",zIndex:1,textAlign:"center"}}>
+            <div style={{
+              fontSize:14,letterSpacing:4,opacity:0.5,
+              fontWeight:700,marginBottom:8,
+            }}>GET INTO POSITION</div>
+            <div style={{
+              fontSize:readyCount<=5?120:100,
+              fontWeight:900,letterSpacing:-6,lineHeight:1,
+              color:readyCount<=5?"#ff6644":readyCount<=10?"#ffcc00":"white",
+              textShadow:readyCount<=3?"0 0 40px #ff664488":"none",
+              transition:"all 0.2s",
+            }}>{readyCount}</div>
+            <div style={{fontSize:13,opacity:0.4,marginTop:12}}>
+              {readyCount>10?"Set up your phone sideways":
+               readyCount>5 ?"Get into pushup position":
+               "Starting soon..."}
             </div>
             <div style={{
-              padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,
-              background:positionOk?"rgba(0,255,136,0.15)":"rgba(255,34,68,0.15)",
-              border:`1px solid ${positionOk?"#00ff88":"#ff2244"}`,
-              color:positionOk?"#00ff88":"#ff2244",
+              marginTop:20,fontSize:12,opacity:0.3,
+              maxWidth:260,lineHeight:1.6,
             }}>
-              {positionOk?"● VALID":"● FIX POSITION"}
+              Position your phone so your full body is visible from the side.
             </div>
-          </div>
-          <div style={{
-            background:"rgba(0,0,0,0.7)",borderRadius:16,padding:16,
-            backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.08)",
-          }}>
-            <div style={{fontSize:11,opacity:0.4,letterSpacing:2,marginBottom:10}}>
-              POSITION CHECK
-            </div>
-            {checks.map((c,i)=>(
-              <div key={i} style={{
-                display:"flex",alignItems:"center",gap:10,padding:"6px 0",
-                borderBottom:i<checks.length-1?"1px solid rgba(255,255,255,0.06)":"none",
-              }}>
-                <span style={{fontSize:16}}>{c.pass?"✅":"❌"}</span>
-                <span style={{fontSize:13,fontWeight:700,flex:1,
-                              color:c.pass?"#00ff88":"#ff4466"}}>{c.label}</span>
-                <span style={{fontSize:11,opacity:0.5}}>{c.value}</span>
-              </div>
-            ))}
-            {checks.length===0&&(
-              <div style={{opacity:0.4,fontSize:13,textAlign:"center",padding:"8px 0"}}>
-                Point camera sideways at your full body
-              </div>
-            )}
-            {positionOk&&(
-              <div style={{marginTop:14}}>
-                <div style={{
-                  display:"flex",justifyContent:"space-between",
-                  fontSize:11,opacity:0.6,marginBottom:6,
-                }}>
-                  <span>Hold position...</span><span>{posHoldPct}%</span>
-                </div>
-                <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.1)",overflow:"hidden"}}>
-                  <div style={{
-                    height:"100%",borderRadius:3,width:`${posHoldPct}%`,
-                    background:"linear-gradient(90deg,#00ff88,#00ccff)",transition:"width 0.15s",
-                  }}/>
-                </div>
-                <div style={{fontSize:11,opacity:0.4,marginTop:6,textAlign:"center"}}>
-                  Starting automatically...
-                </div>
-              </div>
-            )}
-          </div>
-          <div style={{alignSelf:"flex-end",opacity:0.3,fontSize:11}}>
-            {fps}fps · {landmarks}/33
-          </div>
-        </div>
-      )}
-
-      {/* COUNTDOWN */}
-      {screen==="countdown"&&(
-        <div style={{
-          position:"absolute",inset:0,background:"rgba(0,0,0,0.85)",
-          display:"flex",flexDirection:"column",
-          alignItems:"center",justifyContent:"center",gap:20,
-        }}>
-          <div style={{fontSize:14,letterSpacing:4,opacity:0.5,fontWeight:700}}>GET READY</div>
-          <div style={{
-            fontSize:countdown===0?80:140,fontWeight:900,letterSpacing:-6,lineHeight:1,
-            color:countdown===0?"#00ff88":countdown<=2?"#ff6644":"white",
-            textShadow:countdown===0?"0 0 60px #00ff8888":"none",transition:"all 0.15s",
-          }}>
-            {countdown===0?"GO!":countdown}
-          </div>
-          <div style={{fontSize:13,opacity:0.4}}>
-            {countdown>0?`${BATTLE_DURATION_SEC}s pushup battle`:""}
           </div>
         </div>
       )}
