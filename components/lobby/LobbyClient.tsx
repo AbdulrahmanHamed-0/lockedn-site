@@ -109,13 +109,12 @@ export default function LobbyClient({ roomId }: Props) {
         vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
       }
 
-      // Notify Supabase that this player resolved their camera issue
-      // so the opponent's "waiting for camera" message clears
-      await supabase.from("rooms")
-        .update({ [`${isHostRef.current ? "host" : "guest"}_camera_ok`]: true })
-        .eq("id", roomId)
-        .then(() => {}) // fire and forget, column may not exist yet — that's ok
-        .catch(() => {});
+ // Notify Supabase that this player resolved their camera issue
+      try {
+        await supabase.from("rooms")
+          .update({ [`${isHostRef.current ? "host" : "guest"}_camera_ok`]: true })
+          .eq("id", roomId);
+      } catch {} // fire and forget, column may not exist yet — that's ok
 
       setLobbyState("connecting");
       await initRoom();
