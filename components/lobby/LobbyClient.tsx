@@ -1,5 +1,6 @@
 //DEV NOTE : Friends 1v1 ... pregame lobby (should include "READY" , "MIC FOR TRASH TALK" , "SCREENS SIDE BY SIDE") 
 
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -49,9 +50,10 @@ export default function LobbyClient({ roomId }: Props) {
   const [error,       setError]       = useState("");
   const [lobbyTimer,  setLobbyTimer]  = useState(LOBBY_DURATION);
   const [cameraErr,   setCameraErr]   = useState("");
-  const [remoteReady, setRemoteReady] = useState(false);
-  const [isMuted,     setIsMuted]     = useState(false);
-  const [oppSpeaking, setOppSpeaking] = useState(false);
+  const [remoteReady,    setRemoteReady]    = useState(false);
+  const [isMuted,        setIsMuted]        = useState(false);
+  const [oppSpeaking,    setOppSpeaking]    = useState(false);
+  const [oppCameraIssue, setOppCameraIssue] = useState(false);
 
   const inviteUrl = typeof window !== "undefined"
     ? `${window.location.origin}/room/${roomId}` : "";
@@ -107,6 +109,14 @@ export default function LobbyClient({ roomId }: Props) {
         vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
       }
 
+      // Notify Supabase that this player resolved their camera issue
+      // so the opponent's "waiting for camera" message clears
+      await supabase.from("rooms")
+        .update({ [`${isHostRef.current ? "host" : "guest"}_camera_ok`]: true })
+        .eq("id", roomId)
+        .then(() => {}) // fire and forget, column may not exist yet — that's ok
+        .catch(() => {});
+
       setLobbyState("connecting");
       await initRoom();
     } catch {
@@ -129,9 +139,11 @@ export default function LobbyClient({ roomId }: Props) {
         const msg = err2 instanceof Error ? err2.message : "Permission denied";
         setCameraErr(
           msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
-            ? "Camera permission denied. Allow access and try again."
+            ? "Camera permission denied. Please allow camera access and try again."
             : "Could not access camera: " + msg
         );
+        // Tell opponent we're having camera issues
+        setOppCameraIssue(false); // this is MY issue, not theirs
       }
     }
   }, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -169,6 +181,21 @@ export default function LobbyClient({ roomId }: Props) {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        {
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turns:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
     });
 
@@ -460,6 +487,52 @@ export default function LobbyClient({ roomId }: Props) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  // ── Presence: track opponent camera status ───────────────────────
+  // We use a Supabase presence channel to broadcast camera status
+  // No DB changes needed — presence is ephemeral and perfect for this
+  useEffect(() => {
+    if (lobbyState === "camera_prompt") return;
+
+    const presenceChannel = supabase.channel(`presence:${roomId}`, {
+      config: { presence: { key: playerId } },
+    });
+
+    presenceChannel
+      .on("presence", { event: "sync" }, () => {
+        const state = presenceChannel.presenceState<{ cameraOk: boolean }>();
+        const others = Object.entries(state)
+          .filter(([key]) => key !== playerId)
+          .map(([, val]) => val[0]);
+        if (others.length > 0) {
+          // If opponent is present but cameraOk is false → they have issues
+          setOppCameraIssue(others[0]?.cameraOk === false);
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          // Broadcast our camera status
+          await presenceChannel.track({ cameraOk: true });
+        }
+      });
+
+    return () => { supabase.removeChannel(presenceChannel); };
+  }, [lobbyState, roomId, playerId]);
+
+  // When camera fails, broadcast that to opponent
+  useEffect(() => {
+    if (!cameraErr) return;
+    // Broadcast camera issue via presence
+    const ch = supabase.channel(`presence:${roomId}`, {
+      config: { presence: { key: playerId } },
+    });
+    ch.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({ cameraOk: false });
+      }
+    });
+    return () => { supabase.removeChannel(ch); };
+  }, [cameraErr, roomId, playerId]);
+
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach(t => t.stop());
@@ -506,39 +579,63 @@ export default function LobbyClient({ roomId }: Props) {
         <div style={{
           flex: 1, display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          padding: 32, gap: 24, textAlign: "center",
+          padding: 32, gap: 20, textAlign: "center",
         }}>
-          <div style={{ fontSize: 56 }}>📷🎙️</div>
+          <div style={{ fontSize: 52 }}>📷🎙️</div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
-              Camera & Mic Required
+              {cameraErr ? "Permission Needed" : "Camera & Mic Required"}
             </div>
             <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.7, maxWidth: 280 }}>
-              Both players need camera and mic to see and trash talk each other.
+              {cameraErr
+                ? "The room is still open — your opponent is waiting. Fix permissions and rejoin."
+                : "Both players need camera and mic to see and trash talk each other."}
             </div>
           </div>
+
           {cameraErr && (
             <div style={{
-              padding: "12px 16px", borderRadius: 12, fontSize: 12,
-              background: "rgba(255,34,68,0.1)", border: "1px solid rgba(255,34,68,0.3)",
-              color: "#ff4466", maxWidth: 320, lineHeight: 1.6,
+              padding: "14px 16px", borderRadius: 12, fontSize: 12,
+              background: "rgba(255,34,68,0.08)", border: "1px solid rgba(255,34,68,0.25)",
+              color: "#ff6666", maxWidth: 320, lineHeight: 1.7, textAlign: "left",
             }}>
-              {cameraErr}
-              <div style={{ marginTop: 8, opacity: 0.7, fontSize: 11 }}>
-                Tip: Check browser settings and allow camera + mic for this site.
+              <div style={{ fontWeight: 700, marginBottom: 6, color: "#ff4466" }}>
+                ❌ {cameraErr}
+              </div>
+              <div style={{ opacity: 0.8 }}>
+                <strong>How to fix:</strong><br/>
+                1. Tap the 🔒 lock icon in your browser URL bar<br/>
+                2. Set Camera and Microphone to <strong>Allow</strong><br/>
+                3. Tap Try Again below
               </div>
             </div>
           )}
+
           <button onClick={requestCamera} style={{
             padding: "16px 40px", borderRadius: 14, border: 0,
-            background: "linear-gradient(135deg, #00ff88, #00ccff)",
-            color: "#000", fontSize: 16, fontWeight: 900, cursor: "pointer",
+            background: cameraErr
+              ? "#ff4466"
+              : "linear-gradient(135deg, #00ff88, #00ccff)",
+            color: "#fff",
+            fontSize: 16, fontWeight: 900, cursor: "pointer",
+            letterSpacing: 0.5,
           }}>
-            {cameraErr ? "Try Again" : "Allow Camera & Mic"}
+            {cameraErr ? "🔄 Try Again" : "Allow Camera & Mic"}
           </button>
-          <div style={{ fontSize: 11, opacity: 0.3 }}>
-            Camera and audio stay on your device — nothing is stored
-          </div>
+
+          {!cameraErr && (
+            <div style={{ fontSize: 11, opacity: 0.3 }}>
+              Camera and audio stay on your device — nothing is stored
+            </div>
+          )}
+
+          {cameraErr && (
+            <div style={{
+              fontSize: 12, opacity: 0.4, maxWidth: 280, lineHeight: 1.6,
+            }}>
+              ⏳ Your opponent&apos;s room stays open. Fix permissions and tap Try Again to rejoin — no new link needed.
+            </div>
+          )}
         </div>
       )}
 
@@ -598,9 +695,35 @@ export default function LobbyClient({ roomId }: Props) {
               {copied ? "✓ COPIED!" : "COPY INVITE LINK"}
             </button>
           </div>
-          <div style={{ opacity: 0.35, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00ff88", opacity: 0.6 }} />
-            Waiting for opponent to join...
+          {/* Waiting status — shows different message if opp has camera issues */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "10px 16px", borderRadius: 12,
+            background: oppCameraIssue
+              ? "rgba(255,204,0,0.08)"
+              : "rgba(255,255,255,0.04)",
+            border: oppCameraIssue
+              ? "1px solid rgba(255,204,0,0.2)"
+              : "1px solid rgba(255,255,255,0.06)",
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+              background: oppCameraIssue ? "#ffcc00" : "#00ff88",
+              opacity: oppCameraIssue ? 1 : 0.6,
+            }} />
+            <span style={{
+              fontSize: 12,
+              color: oppCameraIssue ? "#ffcc00" : "rgba(255,255,255,0.35)",
+            }}>
+              {oppCameraIssue
+                ? "Opponent is fixing their camera permissions..."
+                : "Waiting for opponent to join..."}
+            </span>
+          </div>
+
+          {/* Room link reminder — always visible while waiting */}
+          <div style={{ fontSize: 11, opacity: 0.3, textAlign: "center", maxWidth: 280 }}>
+            Room stays open as long as you&apos;re here. Opponent can rejoin anytime from the same link.
           </div>
         </div>
       )}
@@ -626,8 +749,18 @@ export default function LobbyClient({ roomId }: Props) {
                 position: "absolute", inset: 0, display: "flex",
                 flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
               }}>
-                <div style={{ fontSize: 44 }}>👤</div>
-                <div style={{ fontSize: 12, opacity: 0.4 }}>Connecting video...</div>
+                <div style={{ fontSize: 44 }}>
+                  {oppCameraIssue ? "⚠️" : "👤"}
+                </div>
+                <div style={{
+                  fontSize: 12,
+                  color: oppCameraIssue ? "#ffcc00" : "rgba(255,255,255,0.4)",
+                  textAlign: "center", maxWidth: 200, lineHeight: 1.6,
+                }}>
+                  {oppCameraIssue
+                    ? "Opponent is fixing their camera permissions..."
+                    : "Connecting video..."}
+                </div>
               </div>
             )}
             <div style={{
