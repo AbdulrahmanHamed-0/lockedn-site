@@ -517,22 +517,25 @@ function startGetReady() {
         </div>
       )}
 
-      {/* Video + canvas — only for setup/battle screens */}
-      {(screen==="getready"||screen==="battle") && (
-        <>
-          <video ref={videoRef} playsInline muted autoPlay style={{
-            position:"absolute",inset:0,width:"100%",height:"100%",
-            objectFit:"cover",transform:"scaleX(-1)",
-          }}/>
-          <canvas ref={canvasRef} style={{
-            position:"absolute",inset:0,width:"100%",height:"100%",
-            transform:"scaleX(-1)",
-          }}/>
-          <div style={{
-            position:"absolute",inset:0,pointerEvents:"none",
-            background:"linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 35%,transparent 60%,rgba(0,0,0,0.7) 100%)",
-          }}/>
-        </>
+  
+      {/* Video always mounted — stream stays attached through screen transitions */}
+      <video ref={videoRef} playsInline muted autoPlay style={{
+        position:"absolute",inset:0,width:"100%",height:"100%",
+        objectFit:"cover",transform:"scaleX(-1)",
+        opacity:(screen==="getready"||screen==="battle")?1:0,
+        pointerEvents:"none",
+      }}/>
+      <canvas ref={canvasRef} style={{
+        position:"absolute",inset:0,width:"100%",height:"100%",
+        transform:"scaleX(-1)",
+        opacity:screen==="battle"?1:0,
+        pointerEvents:"none",
+      }}/>
+      {(screen==="getready"||screen==="battle")&&(
+        <div style={{
+          position:"absolute",inset:0,pointerEvents:"none",
+          background:"linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 35%,transparent 60%,rgba(0,0,0,0.7) 100%)",
+        }}/>
       )}
 
 
