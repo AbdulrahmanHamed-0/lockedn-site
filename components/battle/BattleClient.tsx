@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
-//DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
 "use client";
 
