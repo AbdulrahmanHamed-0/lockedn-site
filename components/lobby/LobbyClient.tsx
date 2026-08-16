@@ -84,20 +84,24 @@ export default function LobbyClient({ roomId }: Props) {
 
   // ── Request camera + mic ─────────────────────────────────────────
   const requestCamera = useCallback(async () => {
-    setCameraErr("");
+    // DON'T clear cameraErr here — only clear it when we're actually
+    // about to call getUserMedia, so there's no flash of the clean state
 
     // ── Check permission state BEFORE calling getUserMedia ────────
-    // This prevents the 1-second flash when already permanently blocked
+    // This prevents the flash when already permanently blocked
     try {
       const camPerm = await navigator.permissions
         .query({ name: "camera" as PermissionName });
       if (camPerm.state === "denied") {
         setCameraErr("blocked");
-        return; // don't even try getUserMedia
+        return; // don't even try getUserMedia — no flash
       }
     } catch {
-      // Permissions API not available — proceed normally
+      // Permissions API not available (Safari) — proceed normally
     }
+
+    // Only clear error now — we're definitely calling getUserMedia
+    setCameraErr("");
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
