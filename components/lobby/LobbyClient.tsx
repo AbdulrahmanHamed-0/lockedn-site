@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... pregame lobby (should include "READY" , "MIC FOR TRASH TALK" , "SCREENS SIDE BY SIDE") 
 
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -86,6 +85,20 @@ export default function LobbyClient({ roomId }: Props) {
   // ── Request camera + mic ─────────────────────────────────────────
   const requestCamera = useCallback(async () => {
     setCameraErr("");
+
+    // ── Check permission state BEFORE calling getUserMedia ────────
+    // This prevents the 1-second flash when already permanently blocked
+    try {
+      const camPerm = await navigator.permissions
+        .query({ name: "camera" as PermissionName });
+      if (camPerm.state === "denied") {
+        setCameraErr("blocked");
+        return; // don't even try getUserMedia
+      }
+    } catch {
+      // Permissions API not available — proceed normally
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 },
@@ -118,25 +131,21 @@ export default function LobbyClient({ roomId }: Props) {
       setLobbyState("connecting");
       await initRoom();
     } catch (err) {
-      // ── Smart permission detection ────────────────────────────────
-      // Check if permanently blocked (browser won't show prompt again)
-      // vs just denied once (browser will re-prompt)
+      // Check again after failure — might have just become denied
       let isPermanentlyBlocked = false;
       try {
         const camPerm = await navigator.permissions
           .query({ name: "camera" as PermissionName });
         isPermanentlyBlocked = camPerm.state === "denied";
       } catch {
-        // Permissions API not available — use error name as fallback
         const errorName = err instanceof Error ? err.name : "";
         isPermanentlyBlocked = errorName === "NotAllowedError";
       }
 
       if (isPermanentlyBlocked) {
-        // Permanently blocked — show settings guide, no point retrying
         setCameraErr("blocked");
       } else {
-        // Not blocked — try video only as fallback (mic might be denied only)
+        // Try video only as fallback (mic might be the only denied one)
         try {
           const videoOnly = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 },
@@ -152,7 +161,6 @@ export default function LobbyClient({ roomId }: Props) {
           setLobbyState("connecting");
           await initRoom();
         } catch {
-          // Camera also denied — show retry
           setCameraErr("denied");
         }
       }
