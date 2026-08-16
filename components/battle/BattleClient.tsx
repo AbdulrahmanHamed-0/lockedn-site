@@ -1,6 +1,5 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
-
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -104,15 +103,22 @@ function speak(text: string, rate=1.0) {
   if (typeof window==="undefined"||!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  utt.rate=rate; utt.pitch=1.05; utt.volume=1;
+  utt.rate   = rate * 1.05; // slightly faster = sounds louder and more punchy
+  utt.pitch  = 1.1;         // slightly higher pitch cuts through better
+  utt.volume = 1;           // max volume
   const voices = window.speechSynthesis.getVoices();
+  // Prefer louder/clearer voices — avoid "whisper" or "compact" variants
   const preferred = voices.find(v=>
-    v.name.toLowerCase().includes("male")||
-    v.name.toLowerCase().includes("daniel")||
-    v.name.toLowerCase().includes("alex")
+    (v.name.toLowerCase().includes("male") ||
+     v.name.toLowerCase().includes("daniel") ||
+     v.name.toLowerCase().includes("alex") ||
+     v.name.toLowerCase().includes("google")) &&
+    !v.name.toLowerCase().includes("whisper") &&
+    !v.name.toLowerCase().includes("compact")
   );
   if (preferred) utt.voice=preferred;
-  window.speechSynthesis.speak(utt);
+  // Small delay to avoid audio context conflicts on mobile
+  setTimeout(() => window.speechSynthesis.speak(utt), 50);
 }
 
 export default function BattleClient({ roomId }: Props) {
