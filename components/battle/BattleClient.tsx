@@ -101,24 +101,39 @@ function isStandingUp(lms: Landmark[]) {
 
 function speak(text: string, rate=1.0) {
   if (typeof window==="undefined"||!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate   = rate * 1.05; // slightly faster = sounds louder and more punchy
-  utt.pitch  = 1.1;         // slightly higher pitch cuts through better
-  utt.volume = 1;           // max volume
+
+  const doSpeak = () => {
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate   = rate * 1.05;
+    utt.pitch  = 1.1;
+    utt.volume = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v=>
+      (v.name.toLowerCase().includes("male") ||
+       v.name.toLowerCase().includes("daniel") ||
+       v.name.toLowerCase().includes("alex") ||
+       v.name.toLowerCase().includes("google")) &&
+      !v.name.toLowerCase().includes("whisper") &&
+      !v.name.toLowerCase().includes("compact")
+    );
+    if (preferred) utt.voice=preferred;
+    window.speechSynthesis.speak(utt);
+  };
+
   const voices = window.speechSynthesis.getVoices();
-  // Prefer louder/clearer voices — avoid "whisper" or "compact" variants
-  const preferred = voices.find(v=>
-    (v.name.toLowerCase().includes("male") ||
-     v.name.toLowerCase().includes("daniel") ||
-     v.name.toLowerCase().includes("alex") ||
-     v.name.toLowerCase().includes("google")) &&
-    !v.name.toLowerCase().includes("whisper") &&
-    !v.name.toLowerCase().includes("compact")
-  );
-  if (preferred) utt.voice=preferred;
-  // Small delay to avoid audio context conflicts on mobile
-  setTimeout(() => window.speechSynthesis.speak(utt), 50);
+  if (voices.length > 0) {
+    // Voices already loaded (Android/Chrome)
+    setTimeout(doSpeak, 50);
+  } else {
+    // iOS Safari loads voices async — wait for the event
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      setTimeout(doSpeak, 100);
+    };
+    // Fallback if onvoiceschanged never fires (some iOS versions)
+    setTimeout(doSpeak, 300);
+  }
 }
 
 export default function BattleClient({ roomId }: Props) {
@@ -368,6 +383,16 @@ export default function BattleClient({ roomId }: Props) {
     }
 
     init();
+
+    // Pre-load voices immediately — critical for iOS Safari
+    // which loads voices async and won't speak if they're not ready
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = null;
+      };
+    }
 
     return ()=>{
       runningRef.current = false;
