@@ -53,6 +53,7 @@ export default function LobbyClient({ roomId }: Props) {
   const [isMuted,        setIsMuted]        = useState(false);
   const [oppSpeaking,    setOppSpeaking]    = useState(false);
   const [oppCameraIssue, setOppCameraIssue] = useState(false);
+  const denyCountRef = useRef(0); // tracks how many times permission was denied
 
   const inviteUrl = typeof window !== "undefined"
     ? `${window.location.origin}/room/${roomId}` : "";
@@ -84,23 +85,32 @@ export default function LobbyClient({ roomId }: Props) {
 
   // ── Request camera + mic ─────────────────────────────────────────
   const requestCamera = useCallback(async () => {
-    // DON'T clear cameraErr here — only clear it when we're actually
-    // about to call getUserMedia, so there's no flash of the clean state
+    // Unlock iOS Safari speech synthesis on this user gesture
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const unlock = new SpeechSynthesisUtterance(" ");
+      unlock.volume = 0.01; unlock.rate = 2;
+      window.speechSynthesis.speak(unlock);
+    }
 
-    // ── Check permission state BEFORE calling getUserMedia ────────
-    // This prevents the flash when already permanently blocked
+    // After 2nd denial, stop retrying — tell user to rejoin from link
+    if (denyCountRef.current >= 2) {
+      setCameraErr("rejoin");
+      return;
+    }
+
+    // Check permission state BEFORE calling getUserMedia
     try {
       const camPerm = await navigator.permissions
         .query({ name: "camera" as PermissionName });
       if (camPerm.state === "denied") {
-        setCameraErr("blocked");
-        return; // don't even try getUserMedia — no flash
+        denyCountRef.current++;
+        setCameraErr(denyCountRef.current >= 2 ? "rejoin" : "blocked");
+        return;
       }
     } catch {
       // Permissions API not available (Safari) — proceed normally
     }
 
-    // Only clear error now — we're definitely calling getUserMedia
     setCameraErr("");
 
     try {
@@ -116,6 +126,7 @@ export default function LobbyClient({ roomId }: Props) {
         },
       });
       streamRef.current = stream;
+      denyCountRef.current = 0; // reset on success
       const micTrack = stream.getAudioTracks()[0];
       if (micTrack) micTrackRef.current = micTrack;
 
@@ -130,26 +141,16 @@ export default function LobbyClient({ roomId }: Props) {
         await supabase.from("rooms")
           .update({ [`${isHostRef.current ? "host" : "guest"}_camera_ok`]: true })
           .eq("id", roomId);
-      } catch {} // fire and forget
+      } catch {}
 
       setLobbyState("connecting");
       await initRoom();
-    } catch (err) {
-      // Check again after failure — might have just become denied
-      let isPermanentlyBlocked = false;
-      try {
-        const camPerm = await navigator.permissions
-          .query({ name: "camera" as PermissionName });
-        isPermanentlyBlocked = camPerm.state === "denied";
-      } catch {
-        const errorName = err instanceof Error ? err.name : "";
-        isPermanentlyBlocked = errorName === "NotAllowedError";
-      }
-
-      if (isPermanentlyBlocked) {
-        setCameraErr("blocked");
+    } catch {
+      denyCountRef.current++;
+      if (denyCountRef.current >= 2) {
+        setCameraErr("rejoin");
       } else {
-        // Try video only as fallback (mic might be the only denied one)
+        // Try video only as fallback
         try {
           const videoOnly = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 },
@@ -157,6 +158,7 @@ export default function LobbyClient({ roomId }: Props) {
             audio: false,
           });
           streamRef.current = videoOnly;
+          denyCountRef.current = 0;
           const vid = localVideoRef.current;
           if (vid) {
             vid.srcObject = videoOnly;
@@ -476,7 +478,19 @@ export default function LobbyClient({ roomId }: Props) {
   async function handleReady() {
     if (myReady) return;
     setMyReady(true);
-    // Save ready state to sessionStorage so refresh restores it
+
+    // ── Unlock iOS Safari speech synthesis ─────────────────────────
+    // iOS requires a user gesture (tap) to enable speechSynthesis.
+    // By speaking a silent/short utterance here during the button tap,
+    // subsequent speak() calls from setInterval (countdown) will work.
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const unlock = new SpeechSynthesisUtterance(" ");
+      unlock.volume = 0.01; // nearly silent
+      unlock.rate = 2;      // fast
+      window.speechSynthesis.speak(unlock);
+    }
+
     saveSession(`lobby_ready_${roomId}`, "true");
     const field = isHost ? "host_ready" : "guest_ready";
     await supabase.from("rooms").update({ [field]: true }).eq("id", roomId);
@@ -605,22 +619,46 @@ export default function LobbyClient({ roomId }: Props) {
           padding: 32, gap: 20, textAlign: "center",
         }}>
           <div style={{ fontSize: 52 }}>
-            {cameraErr === "blocked" ? "🔒" : "📷🎙️"}
+            {cameraErr === "rejoin" ? "🔗" :
+             cameraErr === "blocked" ? "🔒" : "📷🎙️"}
           </div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
-              {cameraErr === "blocked" ? "Camera Blocked"
-               : cameraErr === "denied" ? "Permission Denied"
+              {cameraErr === "rejoin"  ? "Rejoin Required"
+               : cameraErr === "blocked" ? "Camera Blocked"
+               : cameraErr === "denied"  ? "Permission Denied"
                : "Camera & Mic Required"}
             </div>
             <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.7, maxWidth: 280 }}>
-              {cameraErr
+              {cameraErr === "rejoin"
+                ? "Camera permissions were denied. Please rejoin using the same invite link."
+                : cameraErr
                 ? "The room is still open — your opponent is waiting."
                 : "Both players need camera and mic to see and trash talk each other."}
             </div>
           </div>
 
-          {/* BLOCKED — show settings guide, no retry button spam */}
+          {/* REJOIN — tell user to open the link again */}
+          {cameraErr === "rejoin" && (
+            <div style={{
+              padding: "16px", borderRadius: 14, fontSize: 13,
+              background: "rgba(0,136,255,0.08)",
+              border: "1px solid rgba(0,136,255,0.25)",
+              maxWidth: 320, lineHeight: 1.8, textAlign: "left",
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: "#44aaff" }}>
+                How to rejoin:
+              </div>
+              <div style={{ opacity: 0.8, fontSize: 12 }}>
+                1. Copy the invite link from your chat/messages<br/>
+                2. Open it in your browser<br/>
+                3. Allow camera when prompted<br/><br/>
+                Opening the link again resets your permissions automatically.
+              </div>
+            </div>
+          )}
+
+          {/* BLOCKED — show settings guide */}
           {cameraErr === "blocked" && (
             <div style={{
               padding: "16px", borderRadius: 14, fontSize: 13,
@@ -659,21 +697,23 @@ export default function LobbyClient({ roomId }: Props) {
             </div>
           )}
 
-          {/* Button — always shown, text changes by state */}
-          <button onClick={requestCamera} style={{
-            padding: "16px 40px", borderRadius: 14, border: 0,
-            background: cameraErr === "blocked"
-              ? "#ffcc00"
-              : cameraErr === "denied"
-              ? "#ff4466"
-              : "linear-gradient(135deg, #00ff88, #00ccff)",
-            color: cameraErr === "blocked" ? "#000" : "#fff",
-            fontSize: 16, fontWeight: 900, cursor: "pointer", letterSpacing: 0.5,
-          }}>
-            {cameraErr === "blocked" ? "I Fixed It — Try Again"
-             : cameraErr === "denied" ? "🔄 Try Again"
-             : "Allow Camera & Mic"}
-          </button>
+          {/* Button — hidden for rejoin state, changes for others */}
+          {cameraErr !== "rejoin" && (
+            <button onClick={requestCamera} style={{
+              padding: "16px 40px", borderRadius: 14, border: 0,
+              background: cameraErr === "blocked"
+                ? "#ffcc00"
+                : cameraErr === "denied"
+                ? "#ff4466"
+                : "linear-gradient(135deg, #00ff88, #00ccff)",
+              color: cameraErr === "blocked" ? "#000" : "#fff",
+              fontSize: 16, fontWeight: 900, cursor: "pointer", letterSpacing: 0.5,
+            }}>
+              {cameraErr === "blocked" ? "I Fixed It — Try Again"
+               : cameraErr === "denied" ? "🔄 Try Again"
+               : "Allow Camera & Mic"}
+            </button>
+          )}
 
           {!cameraErr && (
             <div style={{ fontSize: 11, opacity: 0.3 }}>
@@ -681,9 +721,18 @@ export default function LobbyClient({ roomId }: Props) {
             </div>
           )}
 
-          {cameraErr && (
+          {cameraErr === "denied" && (
             <div style={{ fontSize: 12, opacity: 0.4, maxWidth: 280, lineHeight: 1.6 }}>
-              ⏳ Room stays open. Fix permissions and tap the button to rejoin — no new link needed.
+              ⏳ Room stays open. Fix permissions and tap Try Again.
+            </div>
+          )}
+
+          {cameraErr === "rejoin" && (
+            <div style={{
+              fontSize: 12, opacity: 0.5, maxWidth: 280, lineHeight: 1.6,
+              marginTop: 4,
+            }}>
+              ⏳ The room is still open — your opponent is waiting. Just re-open the invite link.
             </div>
           )}
         </div>
