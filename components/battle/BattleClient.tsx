@@ -277,16 +277,70 @@ export default function BattleClient({ roomId }: Props) {
     const pc = createPeerConnection();
     const myRole = isHostRef.current ? "host" : "guest";
     subscribeToSignals(pc, myRole);
-    // Host creates the offer with delay to let guest subscribe first
-    // Also retry after 5s in case guest was still loading
-    if (isHostRef.current) {
-      setTimeout(() => createOffer(pc), 3000);
-      setTimeout(() => {
-        // Retry offer if remote video hasn't connected yet
-        if (!remoteReady && pc.connectionState !== "connected") {
-          createOffer(pc).catch(() => {});
+
+    // ── Check for signals that arrived BEFORE we subscribed ─────
+    // This fixes the race condition where host's offer arrives before
+    // guest's subscription is ready
+    try {
+      const { data: existing } = await supabase
+        .from("signals")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("to_id", myRole)
+        .in("type", ["offer_battle", "answer_battle", "ice_battle"])
+        .order("created_at", { ascending: true });
+
+      if (existing) {
+        for (const sig of existing) {
+          try {
+            if (sig.type === "offer_battle" && pc.signalingState === "stable") {
+              await pc.setRemoteDescription(
+                new RTCSessionDescription(sig.payload as unknown as RTCSessionDescriptionInit)
+              );
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              await supabase.from("signals").insert({
+                room_id: roomId, from_id: playerId, to_id: "host",
+                type: "answer_battle", payload: { type: answer.type, sdp: answer.sdp },
+              });
+            } else if (sig.type === "answer_battle" && pc.signalingState !== "stable") {
+              await pc.setRemoteDescription(
+                new RTCSessionDescription(sig.payload as unknown as RTCSessionDescriptionInit)
+              );
+            } else if (sig.type === "ice_battle") {
+              await pc.addIceCandidate(
+                new RTCIceCandidate(sig.payload as unknown as RTCIceCandidateInit)
+              );
+            }
+          } catch {}
         }
-      }, 8000);
+      }
+    } catch {}
+
+    // Host creates offer — with retry in case guest loaded late
+    if (isHostRef.current) {
+      setTimeout(() => {
+        if (pc.connectionState !== "connected") createOffer(pc).catch(() => {});
+      }, 2000);
+      setTimeout(() => {
+        if (pc.connectionState !== "connected") createOffer(pc).catch(() => {});
+      }, 7000);
+    }
+
+    // Guest also creates offer as fallback if host's didn't arrive
+    if (!isHostRef.current) {
+      setTimeout(async () => {
+        if (pc.connectionState !== "connected" && pc.signalingState === "stable") {
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await supabase.from("signals").insert({
+              room_id: roomId, from_id: playerId, to_id: "host",
+              type: "offer_battle", payload: { type: offer.type, sdp: offer.sdp },
+            });
+          } catch {}
+        }
+      }, 5000);
     }
   }
 
@@ -546,6 +600,7 @@ export default function BattleClient({ roomId }: Props) {
   // ── Pose processing ──────────────────────────────────────────────
   function processPose(lms: Landmark[]) {
     const result = checkPosition(lms);
+    setChecks(result.checks);
     const wasOk = posOkRef.current;
     const nowOk = result.ok;
     posOkRef.current = nowOk;
@@ -778,18 +833,28 @@ export default function BattleClient({ roomId }: Props) {
           </div>
 
           {/* Opponent PIP — bottom left corner */}
-          <div style={{
-            position:"absolute", bottom:80, left:16,
-            width:120, height:90, borderRadius:12, overflow:"hidden",
-            border: remoteReady
-              ? "2px solid rgba(255,255,255,0.2)"
-              : "2px solid rgba(255,255,255,0.08)",
-            background:"rgba(0,0,0,0.6)",
-            zIndex:10,
-          }}>
+          <div
+            style={{
+              position:"absolute", bottom:80, left:16,
+              width:120, height:90, borderRadius:12, overflow:"hidden",
+              border: remoteReady
+                ? "2px solid rgba(255,255,255,0.2)"
+                : "2px solid rgba(255,255,255,0.08)",
+              background:"rgba(0,0,0,0.6)",
+              zIndex:10,
+              // Block ALL touch/click events on the entire PIP container
+              touchAction:"none", userSelect:"none",
+              WebkitTouchCallout:"none",
+            }}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchEnd={(e) => e.preventDefault()}
+            onClick={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
             <video
               ref={remoteVideoRef}
               playsInline muted autoPlay
+              controls={false}
               style={{
                 width:"100%", height:"100%", objectFit:"cover",
                 transform:"scaleX(-1)", pointerEvents:"none",
