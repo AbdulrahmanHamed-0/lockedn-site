@@ -84,32 +84,25 @@ export default function LobbyClient({ roomId }: Props) {
 
   // ── Request camera + mic ─────────────────────────────────────────
   const requestCamera = useCallback(async () => {
-    // Unlock iOS Safari speech synthesis on this user gesture
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      const unlock = new SpeechSynthesisUtterance(" ");
-      unlock.volume = 0.01; unlock.rate = 2;
-      window.speechSynthesis.speak(unlock);
-    }
+    // DON'T clear cameraErr here — only clear it when we're actually
+    // about to call getUserMedia, so there's no flash of the clean state
 
-    // If already in "blocked" state, check if user actually fixed it in settings
-    if (cameraErr === "blocked") {
-      try {
-        const camPerm = await navigator.permissions
-          .query({ name: "camera" as PermissionName });
-        if (camPerm.state === "denied") {
-          // Still blocked — show "still blocked" feedback
-          setCameraErr("still_blocked");
-          setTimeout(() => setCameraErr("blocked"), 2000); // revert after 2s
-          return;
-        }
-      } catch {
-        // Safari doesn't support Permissions API — just try getUserMedia
+    // ── Check permission state BEFORE calling getUserMedia ────────
+    // This prevents the flash when already permanently blocked
+    try {
+      const camPerm = await navigator.permissions
+        .query({ name: "camera" as PermissionName });
+      if (camPerm.state === "denied") {
+        setCameraErr("blocked");
+        return; // don't even try getUserMedia — no flash
       }
-      // Permission might be reset — clear error and try again
-      setCameraErr("");
+    } catch {
+      // Permissions API not available (Safari) — proceed normally
     }
 
-    // Normal flow — try to get camera + mic
+    // Only clear error now — we're definitely calling getUserMedia
+    setCameraErr("");
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 },
@@ -137,34 +130,46 @@ export default function LobbyClient({ roomId }: Props) {
         await supabase.from("rooms")
           .update({ [`${isHostRef.current ? "host" : "guest"}_camera_ok`]: true })
           .eq("id", roomId);
-      } catch {}
+      } catch {} // fire and forget
 
       setLobbyState("connecting");
       await initRoom();
-    } catch {
-      // Any denial → go straight to settings guide
-      // No "Try Again" that flashes — just show how to fix it
-      // Try video-only as last resort first
+    } catch (err) {
+      // Check again after failure — might have just become denied
+      let isPermanentlyBlocked = false;
       try {
-        const videoOnly = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 },
-                   frameRate: { ideal: 15 }, facingMode: "user" },
-          audio: false,
-        });
-        streamRef.current = videoOnly;
-        const vid = localVideoRef.current;
-        if (vid) {
-          vid.srcObject = videoOnly;
-          vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
-        }
-        setLobbyState("connecting");
-        await initRoom();
+        const camPerm = await navigator.permissions
+          .query({ name: "camera" as PermissionName });
+        isPermanentlyBlocked = camPerm.state === "denied";
       } catch {
-        // Camera also denied → show settings guide
+        const errorName = err instanceof Error ? err.name : "";
+        isPermanentlyBlocked = errorName === "NotAllowedError";
+      }
+
+      if (isPermanentlyBlocked) {
         setCameraErr("blocked");
+      } else {
+        // Try video only as fallback (mic might be the only denied one)
+        try {
+          const videoOnly = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 },
+                     frameRate: { ideal: 15 }, facingMode: "user" },
+            audio: false,
+          });
+          streamRef.current = videoOnly;
+          const vid = localVideoRef.current;
+          if (vid) {
+            vid.srcObject = videoOnly;
+            vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+          }
+          setLobbyState("connecting");
+          await initRoom();
+        } catch {
+          setCameraErr("denied");
+        }
       }
     }
-  }, [roomId, cameraErr]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mute toggle ──────────────────────────────────────────────────
   function toggleMute() {
@@ -471,19 +476,7 @@ export default function LobbyClient({ roomId }: Props) {
   async function handleReady() {
     if (myReady) return;
     setMyReady(true);
-
-    // ── Unlock iOS Safari speech synthesis ─────────────────────────
-    // iOS requires a user gesture (tap) to enable speechSynthesis.
-    // By speaking a silent/short utterance here during the button tap,
-    // subsequent speak() calls from setInterval (countdown) will work.
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const unlock = new SpeechSynthesisUtterance(" ");
-      unlock.volume = 0.01; // nearly silent
-      unlock.rate = 2;      // fast
-      window.speechSynthesis.speak(unlock);
-    }
-
+    // Save ready state to sessionStorage so refresh restores it
     saveSession(`lobby_ready_${roomId}`, "true");
     const field = isHost ? "host_ready" : "guest_ready";
     await supabase.from("rooms").update({ [field]: true }).eq("id", roomId);
@@ -612,65 +605,74 @@ export default function LobbyClient({ roomId }: Props) {
           padding: 32, gap: 20, textAlign: "center",
         }}>
           <div style={{ fontSize: 52 }}>
-            {cameraErr ? "🔒" : "📷🎙️"}
+            {cameraErr === "blocked" ? "🔒" : "📷🎙️"}
           </div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
-              {cameraErr ? "Camera Blocked" : "Camera & Mic Required"}
+              {cameraErr === "blocked" ? "Camera Blocked"
+               : cameraErr === "denied" ? "Permission Denied"
+               : "Camera & Mic Required"}
             </div>
             <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.7, maxWidth: 280 }}>
               {cameraErr
-                ? "The room is still open — fix your settings and tap Continue."
+                ? "The room is still open — your opponent is waiting."
                 : "Both players need camera and mic to see and trash talk each other."}
             </div>
           </div>
 
-          {/* Settings guide — shown after any denial */}
-          {(cameraErr === "blocked" || cameraErr === "still_blocked") && (
+          {/* BLOCKED — show settings guide, no retry button spam */}
+          {cameraErr === "blocked" && (
             <div style={{
               padding: "16px", borderRadius: 14, fontSize: 13,
-              background: cameraErr === "still_blocked"
-                ? "rgba(255,34,68,0.08)"
-                : "rgba(255,204,0,0.06)",
-              border: `1px solid ${cameraErr === "still_blocked"
-                ? "rgba(255,34,68,0.25)"
-                : "rgba(255,204,0,0.2)"}`,
+              background: "rgba(255,204,0,0.06)",
+              border: "1px solid rgba(255,204,0,0.2)",
               maxWidth: 320, lineHeight: 1.8, textAlign: "left",
             }}>
-              {cameraErr === "still_blocked" && (
-                <div style={{
-                  fontWeight: 700, marginBottom: 10, color: "#ff4466",
-                  fontSize: 14,
-                }}>
-                  ❌ Still blocked — fix settings first
-                </div>
-              )}
               <div style={{ fontWeight: 700, marginBottom: 8, color: "#ffcc00" }}>
-                How to allow camera:
+                🔒 Browser has blocked camera access
               </div>
               <div style={{ opacity: 0.8, fontSize: 12 }}>
+                Your browser remembered your denial. To fix it:<br/><br/>
                 <strong>Chrome / Android:</strong><br/>
-                Tap the 🔒 lock icon in the URL bar<br/>
-                → Permissions → Camera → Allow<br/>
-                → Reload the page<br/><br/>
+                Tap the 🔒 lock in the URL bar → Site settings → Camera → Allow<br/><br/>
                 <strong>Safari / iPhone:</strong><br/>
-                Go to Settings → Safari → Camera<br/>
-                → Set to Allow<br/>
-                → Come back here and tap Continue
+                Settings → Safari → Camera → Allow<br/><br/>
+                Then come back and tap the button below.
               </div>
             </div>
           )}
 
-          {/* Button */}
+          {/* DENIED ONCE — show simple retry */}
+          {cameraErr === "denied" && (
+            <div style={{
+              padding: "14px 16px", borderRadius: 12, fontSize: 12,
+              background: "rgba(255,34,68,0.08)",
+              border: "1px solid rgba(255,34,68,0.2)",
+              color: "#ff6666", maxWidth: 320, lineHeight: 1.7, textAlign: "left",
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 4, color: "#ff4466" }}>
+                ❌ Camera access was denied
+              </div>
+              <div style={{ opacity: 0.8 }}>
+                Tap Try Again and allow camera access when prompted.
+              </div>
+            </div>
+          )}
+
+          {/* Button — always shown, text changes by state */}
           <button onClick={requestCamera} style={{
             padding: "16px 40px", borderRadius: 14, border: 0,
-            background: cameraErr
+            background: cameraErr === "blocked"
               ? "#ffcc00"
+              : cameraErr === "denied"
+              ? "#ff4466"
               : "linear-gradient(135deg, #00ff88, #00ccff)",
-            color: cameraErr ? "#000" : "#fff",
+            color: cameraErr === "blocked" ? "#000" : "#fff",
             fontSize: 16, fontWeight: 900, cursor: "pointer", letterSpacing: 0.5,
           }}>
-            {cameraErr ? "I Fixed It — Continue" : "Allow Camera & Mic"}
+            {cameraErr === "blocked" ? "I Fixed It — Try Again"
+             : cameraErr === "denied" ? "🔄 Try Again"
+             : "Allow Camera & Mic"}
           </button>
 
           {!cameraErr && (
@@ -681,7 +683,7 @@ export default function LobbyClient({ roomId }: Props) {
 
           {cameraErr && (
             <div style={{ fontSize: 12, opacity: 0.4, maxWidth: 280, lineHeight: 1.6 }}>
-              ⏳ Your opponent is waiting. Fix the settings above and tap Continue.
+              ⏳ Room stays open. Fix permissions and tap the button to rejoin — no new link needed.
             </div>
           )}
         </div>
