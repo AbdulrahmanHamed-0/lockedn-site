@@ -318,12 +318,16 @@ export default function LobbyClient({ roomId }: Props) {
   // ── Init room ────────────────────────────────────────────────────
   const initRoom = useCallback(async () => {
     const { data, error: err } = await supabase
-      .from("rooms").select("*").eq("id", roomId).single();
+      .from("rooms").select("*").eq("id", roomId).maybeSingle();
 
-    if (err || !data) {
-      // Create new room
-      const { error: createErr } = await supabase.from("rooms").insert({
+    if (!data) {
+      // Create new room — use upsert to avoid duplicate key error
+      // if a room with this ID exists from a previous match
+      const { error: createErr } = await supabase.from("rooms").upsert({
         id: roomId, host_id: playerId, status: "waiting",
+        host_ready: false, guest_ready: false,
+        host_score: 0, guest_score: 0,
+        guest_id: null, started_at: null, finished_at: null,
       });
       if (createErr) {
         setError("Failed to create room: " + createErr.message);
