@@ -652,17 +652,20 @@ export default function LobbyClient({ roomId }: Props) {
                 <strong>Chrome / Android:</strong><br/>
                 Tap the 🔒 lock icon in the URL bar<br/>
                 → Permissions → Camera → Allow<br/>
-                → Reload the page<br/><br/>
+                → Tap Reload button below<br/><br/>
                 <strong>Safari / iPhone:</strong><br/>
                 Go to Settings → Safari → Camera<br/>
                 → Set to Allow<br/>
-                → Come back here and tap Continue
+                → Tap Reload button below
               </div>
             </div>
           )}
 
-          {/* Button */}
-          <button onClick={requestCamera} style={{
+          {/* Button — when blocked, RELOAD the page instead of retrying getUserMedia */}
+          <button onClick={cameraErr
+            ? () => window.location.reload()
+            : requestCamera
+          } style={{
             padding: "16px 40px", borderRadius: 14, border: 0,
             background: cameraErr
               ? "#ffcc00"
@@ -670,7 +673,7 @@ export default function LobbyClient({ roomId }: Props) {
             color: cameraErr ? "#000" : "#fff",
             fontSize: 16, fontWeight: 900, cursor: "pointer", letterSpacing: 0.5,
           }}>
-            {cameraErr ? "I Fixed It — Continue" : "Allow Camera & Mic"}
+            {cameraErr ? "Reload & Try Again" : "Allow Camera & Mic"}
           </button>
 
           {!cameraErr && (
@@ -681,7 +684,7 @@ export default function LobbyClient({ roomId }: Props) {
 
           {cameraErr && (
             <div style={{ fontSize: 12, opacity: 0.4, maxWidth: 280, lineHeight: 1.6 }}>
-              ⏳ Your opponent is waiting. Fix the settings above and tap Continue.
+              ⏳ Your opponent is waiting. Fix settings above, then tap Reload.
             </div>
           )}
         </div>
