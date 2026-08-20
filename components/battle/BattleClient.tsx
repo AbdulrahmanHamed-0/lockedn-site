@@ -145,9 +145,20 @@ export default function BattleClient({ roomId }: Props) {
   const streamRef     = useRef<MediaStream|null>(null);
   const landmarkerRef = useRef<PoseLandmarkerType|null>(null);
   const rafRef        = useRef<number|null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement|null>(null);
-  const pcRef          = useRef<RTCPeerConnection|null>(null);
-  const makingOfferRef = useRef(false);
+  const remoteVideoRef  = useRef<HTMLVideoElement|null>(null);
+  const remoteStreamRef = useRef<MediaStream|null>(null); // stores opponent stream until video mounts
+  const pcRef           = useRef<RTCPeerConnection|null>(null);
+  const makingOfferRef  = useRef(false);
+
+  // Callback ref for remote video — attaches stream when element mounts
+  const setRemoteVideoRef = useCallback((el: HTMLVideoElement|null) => {
+    remoteVideoRef.current = el;
+    if (el && remoteStreamRef.current) {
+      el.srcObject = remoteStreamRef.current;
+      el.muted = true;
+      el.onloadedmetadata = () => { el.play().catch(() => {}); };
+    }
+  }, []);
 
   const runningRef     = useRef(false);
   const lastDetectRef  = useRef(0);
@@ -200,10 +211,14 @@ export default function BattleClient({ roomId }: Props) {
     pc.ontrack = (event) => {
       if (event.track.kind === "video") {
         const [remoteStream] = event.streams;
+        const videoStream = new MediaStream(remoteStream.getVideoTracks());
+        // Save stream in ref — it'll be attached when video element mounts
+        remoteStreamRef.current = videoStream;
         setRemoteReady(true);
+        // If video element already exists, attach immediately
         const vid = remoteVideoRef.current;
         if (vid) {
-          vid.srcObject = new MediaStream(remoteStream.getVideoTracks());
+          vid.srcObject = videoStream;
           vid.muted = true;
           vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
         }
@@ -600,6 +615,7 @@ export default function BattleClient({ roomId }: Props) {
   // ── Pose processing ──────────────────────────────────────────────
   function processPose(lms: Landmark[]) {
     const result = checkPosition(lms);
+    setChecks(result.checks);
     const wasOk = posOkRef.current;
     const nowOk = result.ok;
     posOkRef.current = nowOk;
@@ -851,7 +867,7 @@ export default function BattleClient({ roomId }: Props) {
             onContextMenu={(e) => e.preventDefault()}
           >
             <video
-              ref={remoteVideoRef}
+              ref={setRemoteVideoRef}
               playsInline muted autoPlay
               controls={false}
               style={{
