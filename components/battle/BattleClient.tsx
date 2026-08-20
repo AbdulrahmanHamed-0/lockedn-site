@@ -145,6 +145,9 @@ export default function BattleClient({ roomId }: Props) {
   const streamRef     = useRef<MediaStream|null>(null);
   const landmarkerRef = useRef<PoseLandmarkerType|null>(null);
   const rafRef        = useRef<number|null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement|null>(null);
+  const pcRef          = useRef<RTCPeerConnection|null>(null);
+  const makingOfferRef = useRef(false);
 
   const runningRef     = useRef(false);
   const lastDetectRef  = useRef(0);
@@ -161,19 +164,125 @@ export default function BattleClient({ roomId }: Props) {
   const isHostRef      = useRef(false);
   const endedRef       = useRef(false);
 
-  const [screen,     setScreen]     = useState<AppScreen>("loading");
-  const [fps,        setFps]        = useState(0);
-  const [landmarks,  setLandmarks]  = useState(0);
-  const [repCount,   setRepCount]   = useState(0);
-  const [oppScore,   setOppScore]   = useState<number|null>(null);
-  const [phase,      setPhase]      = useState<PushupPhase>("no_plank");
-  const [positionOk, setPositionOk] = useState(false);
-  const [checks,     setChecks]     = useState<CheckResult[]>([]);
-  const [countdown,  setCountdown]  = useState(5);
-  const [battleTime, setBattleTime] = useState(BATTLE_DURATION_SEC);
-  const [readyCount, setReadyCount] = useState(GET_READY_SEC);
-  const [finalReps,  setFinalReps]  = useState(0);
-  const [finalOpp,   setFinalOpp]   = useState<number|null>(null);
+  const [screen,      setScreen]      = useState<AppScreen>("loading");
+  const [fps,         setFps]         = useState(0);
+  const [landmarks,   setLandmarks]   = useState(0);
+  const [repCount,    setRepCount]    = useState(0);
+  const [oppScore,    setOppScore]    = useState<number|null>(null);
+  const [phase,       setPhase]       = useState<PushupPhase>("no_plank");
+  const [positionOk,  setPositionOk]  = useState(false);
+  const [battleTime,  setBattleTime]  = useState(BATTLE_DURATION_SEC);
+  const [readyCount,  setReadyCount]  = useState(GET_READY_SEC);
+  const [finalReps,   setFinalReps]   = useState(0);
+  const [finalOpp,    setFinalOpp]    = useState<number|null>(null);
+  const [remoteReady, setRemoteReady] = useState(false);
+
+  // ── WebRTC for opponent PIP camera ───────────────────────────────
+  function createPeerConnection() {
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject", credential: "openrelayproject" },
+        { urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject", credential: "openrelayproject" },
+        { urls: "turns:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject", credential: "openrelayproject" },
+      ],
+    });
+
+    // Add local video tracks so opponent can see us too
+    streamRef.current?.getTracks().forEach(track => {
+      pc.addTrack(track, streamRef.current!);
+    });
+
+    pc.ontrack = (event) => {
+      if (event.track.kind === "video") {
+        const [remoteStream] = event.streams;
+        setRemoteReady(true);
+        const vid = remoteVideoRef.current;
+        if (vid) {
+          vid.srcObject = new MediaStream(remoteStream.getVideoTracks());
+          vid.muted = true;
+          vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+        }
+      }
+    };
+
+    pc.onicecandidate = async (event) => {
+      if (!event.candidate) return;
+      await supabase.from("signals").insert({
+        room_id: roomId, from_id: playerId,
+        to_id: isHostRef.current ? "guest" : "host",
+        type: "ice_battle", payload: event.candidate.toJSON(),
+      });
+    };
+
+    pcRef.current = pc;
+    return pc;
+  }
+
+  async function createOffer(pc: RTCPeerConnection) {
+    makingOfferRef.current = true;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await supabase.from("signals").insert({
+        room_id: roomId, from_id: playerId, to_id: "guest",
+        type: "offer_battle", payload: { type: offer.type, sdp: offer.sdp },
+      });
+    } finally { makingOfferRef.current = false; }
+  }
+
+  function subscribeToSignals(pc: RTCPeerConnection, myRole: "host"|"guest") {
+    supabase
+      .channel(`battle_signals:${roomId}:${myRole}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public",
+        table: "signals", filter: `room_id=eq.${roomId}`,
+      }, async (payload) => {
+        const signal = payload.new as {
+          to_id: string; type: string; payload: Record<string, unknown>;
+        };
+        if (signal.to_id !== myRole) return;
+        if (signal.type === "offer_battle") {
+          await pc.setRemoteDescription(
+            new RTCSessionDescription(signal.payload as unknown as RTCSessionDescriptionInit)
+          );
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await supabase.from("signals").insert({
+            room_id: roomId, from_id: playerId, to_id: "host",
+            type: "answer_battle", payload: { type: answer.type, sdp: answer.sdp },
+          });
+        } else if (signal.type === "answer_battle") {
+          if (pc.signalingState !== "stable") {
+            await pc.setRemoteDescription(
+              new RTCSessionDescription(signal.payload as unknown as RTCSessionDescriptionInit)
+            );
+          }
+        } else if (signal.type === "ice_battle") {
+          try {
+            await pc.addIceCandidate(
+              new RTCIceCandidate(signal.payload as unknown as RTCIceCandidateInit)
+            );
+          } catch {}
+        }
+      })
+      .subscribe();
+  }
+
+  async function startWebRTC() {
+    const pc = createPeerConnection();
+    const myRole = isHostRef.current ? "host" : "guest";
+    subscribeToSignals(pc, myRole);
+    // Host creates the offer
+    if (isHostRef.current) {
+      // Small delay to let guest subscribe first
+      setTimeout(() => createOffer(pc), 1500);
+    }
+  }
 
   // ── MediaPipe ─────────────────────────────────────────────────────
   async function createLandmarker() {
@@ -201,6 +310,8 @@ export default function BattleClient({ roomId }: Props) {
     if (video) { video.srcObject=stream; await video.play(); }
     landmarkerRef.current = await createLandmarker();
     runningRef.current = true;
+    // Start WebRTC for opponent PIP camera
+    startWebRTC();
     loop();
   }
 
@@ -399,6 +510,7 @@ export default function BattleClient({ roomId }: Props) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach(t=>t.stop());
       landmarkerRef.current?.close();
+      pcRef.current?.close();
       window.speechSynthesis?.cancel();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -547,9 +659,11 @@ export default function BattleClient({ roomId }: Props) {
     descending:"#ffcc00",bottom:"#ff6644",ascending:"#44aaff",
   };
 
-  const didWin = finalOpp!==null
-    ? finalReps>finalOpp
-    : oppScore!==null ? repCount>oppScore : null;
+  const matchResult: "win"|"lose"|"tie"|null = finalOpp !== null
+    ? finalReps > finalOpp ? "win" : finalReps < finalOpp ? "lose" : "tie"
+    : oppScore !== null
+    ? repCount > oppScore ? "win" : repCount < oppScore ? "lose" : "tie"
+    : null;
 
   return (
     <div style={{
@@ -627,35 +741,102 @@ export default function BattleClient({ roomId }: Props) {
         </div>
       )}
 
-      {/* BATTLE */}
+      {/* BATTLE — Option 2: your cam fullscreen, opponent PIP */}
       {screen==="battle"&&(
         <div style={{
           position:"absolute",inset:0,display:"flex",
           flexDirection:"column",justifyContent:"space-between",
         }}>
+          {/* Top HUD */}
           <div style={{padding:"20px 20px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            {/* YOUR reps — big, top left */}
             <div>
               <div style={{
-                fontSize:100,fontWeight:900,lineHeight:0.9,letterSpacing:-5,
+                fontSize:96,fontWeight:900,lineHeight:0.9,letterSpacing:-5,
                 color:"#00ff88",textShadow:"0 0 40px rgba(0,255,136,0.4)",
               }}>{repCount}</div>
-              <div style={{fontSize:11,opacity:0.5,letterSpacing:2,marginTop:4}}>YOU</div>
+              <div style={{fontSize:11,opacity:0.5,letterSpacing:2,marginTop:4}}>YOUR REPS</div>
             </div>
+
+            {/* Timer — top right */}
             <div style={{textAlign:"right"}}>
               <div style={{
-                fontSize:52,fontWeight:900,letterSpacing:-2,lineHeight:1,
+                fontSize:48,fontWeight:900,letterSpacing:-2,lineHeight:1,
                 color:battleTime<=10?"#ff6644":"white",
                 textShadow:battleTime<=10?"0 0 20px rgba(255,100,68,0.5)":"none",
                 transition:"color 0.3s",
               }}>{battleTime}</div>
               <div style={{fontSize:11,opacity:0.5,letterSpacing:2}}>SEC</div>
-              {oppScore!==null&&(
-                <div style={{marginTop:8,fontSize:13,opacity:0.7}}>
-                  OPP: <span style={{color:"white",fontWeight:700}}>{oppScore}</span>
-                </div>
-              )}
             </div>
           </div>
+
+          {/* Opponent PIP — bottom left corner */}
+          <div style={{
+            position:"absolute", bottom:80, left:16,
+            width:120, height:90, borderRadius:12, overflow:"hidden",
+            border: remoteReady
+              ? "2px solid rgba(255,255,255,0.2)"
+              : "2px solid rgba(255,255,255,0.08)",
+            background:"rgba(0,0,0,0.6)",
+            zIndex:10,
+          }}>
+            <video
+              ref={remoteVideoRef}
+              playsInline muted autoPlay
+              style={{
+                width:"100%", height:"100%", objectFit:"cover",
+                transform:"scaleX(-1)", pointerEvents:"none",
+                opacity: remoteReady ? 1 : 0,
+              }}
+            />
+            {!remoteReady && (
+              <div style={{
+                position:"absolute", inset:0, display:"flex",
+                alignItems:"center", justifyContent:"center",
+              }}>
+                <div style={{fontSize:20}}>👤</div>
+              </div>
+            )}
+            {/* Opponent score overlay on PIP */}
+            <div style={{
+              position:"absolute", bottom:0, left:0, right:0,
+              padding:"4px 8px",
+              background:"linear-gradient(transparent, rgba(0,0,0,0.8))",
+              display:"flex", justifyContent:"space-between", alignItems:"center",
+            }}>
+              <span style={{fontSize:10,opacity:0.6}}>OPP</span>
+              <span style={{
+                fontSize:16, fontWeight:900,
+                color: oppScore !== null && oppScore >= repCount ? "#ff6644" : "white",
+              }}>
+                {oppScore !== null ? oppScore : "—"}
+              </span>
+            </div>
+          </div>
+
+          {/* 🔥 indicator if opponent is ahead */}
+          {oppScore !== null && oppScore > repCount && (
+            <div style={{
+              position:"absolute", bottom:175, left:16,
+              fontSize:12, fontWeight:700, color:"#ff6644",
+              display:"flex", alignItems:"center", gap:4,
+              zIndex:10,
+            }}>
+              🔥 OPP is ahead by {oppScore - repCount}
+            </div>
+          )}
+          {oppScore !== null && repCount > oppScore && (
+            <div style={{
+              position:"absolute", bottom:175, left:16,
+              fontSize:12, fontWeight:700, color:"#00ff88",
+              display:"flex", alignItems:"center", gap:4,
+              zIndex:10,
+            }}>
+              💪 You lead by {repCount - oppScore}
+            </div>
+          )}
+
+          {/* Phase pill — center */}
           <div style={{display:"flex",justifyContent:"center"}}>
             <div style={{
               padding:"6px 18px",borderRadius:30,fontSize:13,fontWeight:700,
@@ -664,6 +845,8 @@ export default function BattleClient({ roomId }: Props) {
               color:phaseColor[phase],letterSpacing:1,
             }}>{phaseLabel[phase]}</div>
           </div>
+
+          {/* Bottom bar */}
           <div style={{
             padding:"0 20px 28px",
             display:"flex",justifyContent:"space-between",alignItems:"flex-end",
@@ -680,7 +863,7 @@ export default function BattleClient({ roomId }: Props) {
                 background:positionOk?"#00ff88":"#ff2244",
                 boxShadow:positionOk?"0 0 6px #00ff88":"0 0 6px #ff2244",
               }}/>
-              {positionOk?"COUNTING":"INVALID"}
+              {positionOk?"COUNTING":"FIX FORM"}
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{opacity:0.3,fontSize:11}}>{fps}fps</span>
@@ -764,13 +947,15 @@ export default function BattleClient({ roomId }: Props) {
           <div style={{fontSize:16,fontWeight:900,opacity:0.4,marginBottom:32}}>
             LOCKED&apos;N<span style={{color:"#00ff88"}}>.</span>
           </div>
-          {didWin!==null&&(
+          {matchResult!==null&&(
             <div style={{
               fontSize:28,fontWeight:900,letterSpacing:2,marginBottom:20,
-              color:didWin?"#00ff88":"#ff4466",
-              textShadow:didWin?"0 0 30px #00ff8866":"0 0 30px #ff446644",
+              color:matchResult==="win"?"#00ff88":matchResult==="tie"?"#ffcc00":"#ff4466",
+              textShadow:matchResult==="win"?"0 0 30px #00ff8866"
+                        :matchResult==="tie"?"0 0 30px #ffcc0044"
+                        :"0 0 30px #ff446644",
             }}>
-              {didWin?"🏆 YOU WIN":"😤 YOU LOSE"}
+              {matchResult==="win"?"🏆 YOU WIN":matchResult==="tie"?"🤝 IT'S A TIE":"😤 YOU LOSE"}
             </div>
           )}
           <div style={{
@@ -780,15 +965,17 @@ export default function BattleClient({ roomId }: Props) {
             borderRadius:24,overflow:"hidden",
           }}>
             <div style={{
-              background:didWin
+              background:matchResult==="win"
                 ?"linear-gradient(90deg,#00ff8822,#00ccff22)"
+                :matchResult==="tie"
+                ?"linear-gradient(90deg,#ffcc0022,#ffaa0022)"
                 :"linear-gradient(90deg,#ff446622,#ff664422)",
               borderBottom:"1px solid rgba(255,255,255,0.08)",
               padding:"12px 20px",textAlign:"center",
               fontSize:12,fontWeight:700,letterSpacing:3,
-              color:didWin===null?"white":didWin?"#00ff88":"#ff4466",
+              color:matchResult===null?"white":matchResult==="win"?"#00ff88":matchResult==="tie"?"#ffcc00":"#ff4466",
             }}>
-              {didWin===null?"BATTLE COMPLETE":didWin?"🏆 WINNER":"GOOD FIGHT"}
+              {matchResult===null?"BATTLE COMPLETE":matchResult==="win"?"🏆 WINNER":matchResult==="tie"?"🤝 TIED":"GOOD FIGHT"}
             </div>
             <div style={{
               display:"grid",gridTemplateColumns:"1fr auto 1fr",
