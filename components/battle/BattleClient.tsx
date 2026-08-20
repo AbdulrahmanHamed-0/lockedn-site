@@ -546,7 +546,6 @@ export default function BattleClient({ roomId }: Props) {
   // ── Pose processing ──────────────────────────────────────────────
   function processPose(lms: Landmark[]) {
     const result = checkPosition(lms);
-    setChecks(result.checks);
     const wasOk = posOkRef.current;
     const nowOk = result.ok;
     posOkRef.current = nowOk;
