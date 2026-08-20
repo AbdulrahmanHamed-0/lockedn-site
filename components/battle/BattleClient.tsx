@@ -277,10 +277,16 @@ export default function BattleClient({ roomId }: Props) {
     const pc = createPeerConnection();
     const myRole = isHostRef.current ? "host" : "guest";
     subscribeToSignals(pc, myRole);
-    // Host creates the offer
+    // Host creates the offer with delay to let guest subscribe first
+    // Also retry after 5s in case guest was still loading
     if (isHostRef.current) {
-      // Small delay to let guest subscribe first
-      setTimeout(() => createOffer(pc), 1500);
+      setTimeout(() => createOffer(pc), 3000);
+      setTimeout(() => {
+        // Retry offer if remote video hasn't connected yet
+        if (!remoteReady && pc.connectionState !== "connected") {
+          createOffer(pc).catch(() => {});
+        }
+      }, 8000);
     }
   }
 
@@ -540,6 +546,7 @@ export default function BattleClient({ roomId }: Props) {
   // ── Pose processing ──────────────────────────────────────────────
   function processPose(lms: Landmark[]) {
     const result = checkPosition(lms);
+    setChecks(result.checks);
     const wasOk = posOkRef.current;
     const nowOk = result.ok;
     posOkRef.current = nowOk;
@@ -683,11 +690,13 @@ export default function BattleClient({ roomId }: Props) {
       )}
 
       {/* Video always mounted — stays attached through screen transitions */}
-      <video ref={videoRef} playsInline muted autoPlay style={{
-        position:"absolute",inset:0,width:"100%",height:"100%",
-        objectFit:"cover",transform:"scaleX(-1)",
-        opacity:(screen==="getready"||screen==="battle")?1:0,
-        pointerEvents:"none",
+      <video ref={videoRef} playsInline muted autoPlay
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          position:"absolute",inset:0,width:"100%",height:"100%",
+          objectFit:"cover",transform:"scaleX(-1)",
+          opacity:(screen==="getready"||screen==="battle")?1:0,
+          pointerEvents:"none",
       }}/>
       <canvas ref={canvasRef} style={{
         position:"absolute",inset:0,width:"100%",height:"100%",
@@ -787,6 +796,7 @@ export default function BattleClient({ roomId }: Props) {
                 transform:"scaleX(-1)", pointerEvents:"none",
                 opacity: remoteReady ? 1 : 0,
               }}
+              onContextMenu={(e) => e.preventDefault()}
             />
             {!remoteReady && (
               <div style={{
@@ -799,7 +809,7 @@ export default function BattleClient({ roomId }: Props) {
             {/* Opponent score overlay on PIP */}
             <div style={{
               position:"absolute", bottom:0, left:0, right:0,
-              padding:"4px 8px",
+              padding:"4px 8px", pointerEvents:"none",
               background:"linear-gradient(transparent, rgba(0,0,0,0.8))",
               display:"flex", justifyContent:"space-between", alignItems:"center",
             }}>
@@ -819,7 +829,7 @@ export default function BattleClient({ roomId }: Props) {
               position:"absolute", bottom:175, left:16,
               fontSize:12, fontWeight:700, color:"#ff6644",
               display:"flex", alignItems:"center", gap:4,
-              zIndex:10,
+              zIndex:10, pointerEvents:"none",
             }}>
               🔥 OPP is ahead by {oppScore - repCount}
             </div>
@@ -829,7 +839,7 @@ export default function BattleClient({ roomId }: Props) {
               position:"absolute", bottom:175, left:16,
               fontSize:12, fontWeight:700, color:"#00ff88",
               display:"flex", alignItems:"center", gap:4,
-              zIndex:10,
+              zIndex:10, pointerEvents:"none",
             }}>
               💪 You lead by {repCount - oppScore}
             </div>
@@ -845,7 +855,7 @@ export default function BattleClient({ roomId }: Props) {
             }}>{phaseLabel[phase]}</div>
           </div>
 
-          {/* Bottom bar */}
+          {/* Bottom bar — no END button */}
           <div style={{
             padding:"0 20px 28px",
             display:"flex",justifyContent:"space-between",alignItems:"flex-end",
@@ -864,15 +874,7 @@ export default function BattleClient({ roomId }: Props) {
               }}/>
               {positionOk?"COUNTING":"FIX FORM"}
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{opacity:0.3,fontSize:11}}>{fps}fps</span>
-              <button onClick={()=>endBattle()} style={{
-                padding:"8px 16px",borderRadius:10,cursor:"pointer",
-                border:"1px solid rgba(255,255,255,0.2)",
-                background:"rgba(0,0,0,0.5)",color:"rgba(255,255,255,0.6)",
-                fontSize:12,fontWeight:700,
-              }}>END</button>
-            </div>
+            <span style={{opacity:0.3,fontSize:11}}>{fps}fps</span>
           </div>
         </div>
       )}
