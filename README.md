@@ -1,8 +1,6 @@
-# Locked’n
+# Locked’n 1v1 Website
 
 This is the startup website I am currently working on for **Locked’n**, an AI-powered fitness platform focused on making workouts more competitive, fun, and interactive.
-
-The platform is designed to help people exercise with correct form and perform movements properly across various exercises using real-time AI pose detection and feedback.
 
 The website is being built with **Next.js / React** and includes browser-based 1v1 fitness battles, friend challenges, rep tracking, form feedback, ranks, leaderboards, and gamified audio/visual effects.
 
