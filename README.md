@@ -26,6 +26,6 @@ The website is being built with **Next.js / React** and includes browser-based 1
 * Vercel
 * Git
 
-## Test It With a Friend
+## Wanna Battle a Friend
 
 [**lockedn.app/1v1**](https://lockedn.app/1v1)
