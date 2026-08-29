@@ -1,5 +1,6 @@
 //DEV NOTE : Friends 1v1 ... actual 1v1 battle ...
 
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -117,46 +118,63 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
   };
 }
 
+function pickBestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (voices.length === 0) return null;
+
+  // Filter out bad voices first — these are quiet/robotic/broken
+  const good = voices.filter(v => {
+    const n = v.name.toLowerCase();
+    return !n.includes("whisper") &&
+           !n.includes("compact") &&
+           !n.includes("network") &&  // network voices have variable quality
+           !n.includes("reed") &&
+           v.lang.startsWith("en");    // English only
+  });
+
+  if (good.length === 0) return voices[0]; // fallback to first available
+
+  // Prefer specific high-quality voices by name
+  const priorities = ["google us english", "google uk english", "samantha",
+                      "daniel", "alex", "karen", "moira", "tessa", "fiona"];
+  for (const pref of priorities) {
+    const match = good.find(v => v.name.toLowerCase().includes(pref));
+    if (match) return match;
+  }
+
+  // Prefer non-network, local voices (more consistent volume)
+  const local = good.find(v => !v.name.toLowerCase().includes("online") && v.localService);
+  if (local) return local;
+
+  return good[0];
+}
+
 function speak(text: string, rate = 1.0) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
 
   // Step 1: Cancel any current speech
   window.speechSynthesis.cancel();
 
-  // Step 2: Create utterance IMMEDIATELY (before any async gap)
+  // Step 2: Create utterance IMMEDIATELY
   const utt = new SpeechSynthesisUtterance(text);
   utt.rate   = rate * 1.05;
   utt.pitch  = 1.1;
-  utt.volume = 1;
+  utt.volume = 1; // always max
 
-  // Pick voice from cached list
-  if (cachedVoices.length > 0) {
-    const preferred = cachedVoices.find(v =>
-      (v.name.toLowerCase().includes("male") ||
-       v.name.toLowerCase().includes("daniel") ||
-       v.name.toLowerCase().includes("alex") ||
-       v.name.toLowerCase().includes("google")) &&
-      !v.name.toLowerCase().includes("whisper") &&
-      !v.name.toLowerCase().includes("compact")
-    );
-    if (preferred) utt.voice = preferred;
-  }
+  // Pick consistent voice
+  const voice = pickBestVoice(cachedVoices);
+  if (voice) utt.voice = voice;
 
-  // Store reference to prevent garbage collection (Android bug)
+  // Store reference to prevent garbage collection
   lastUtteranceRef.current = utt;
 
-  // Step 3: Speak after a delay — Android needs 150ms+ after cancel()
-  // iOS needs less but 150ms works for both
+  // Step 3: Speak after 150ms gap (Android needs this after cancel)
   setTimeout(() => {
-    // Android Chrome sometimes pauses speechSynthesis when busy
-    // Resume it just in case
     if (window.speechSynthesis.paused) {
       window.speechSynthesis.resume();
     }
     window.speechSynthesis.speak(utt);
 
-    // Step 4: Android safety net — check after 500ms if speech started
-    // If not, retry once
+    // Safety net — retry if speech didn't start after 500ms
     setTimeout(() => {
       if (window.speechSynthesis.pending && !window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
@@ -701,10 +719,8 @@ export default function BattleClient({ roomId }: Props) {
     const cur = screenRef.current;
 
     if (cur==="battle") {
-      const elapsed   = (performance.now()-battleStartRef.current)/1000;
-      const remaining = Math.max(0, BATTLE_DURATION_SEC-elapsed);
-      setBattleTime(Math.ceil(remaining));
-      if (remaining<=0 && !endedRef.current){ endBattle(); return; }
+      // Timer is handled in rAF loop — no need to update here
+      if (endedRef.current) return;
 
       if (isStandingUp(lms)){
         if (phaseRef.current!=="no_plank"){ phaseRef.current="no_plank"; setPhase("no_plank"); }
@@ -789,6 +805,15 @@ export default function BattleClient({ roomId }: Props) {
         const lms=(result.landmarks?.[0]??[]) as Landmark[];
         setLandmarks(lms.length);
         drawPose(lms,phaseRef.current,posOkRef.current);
+
+        // ── Timer ALWAYS updates — even when no one is in frame ────
+        if (cur==="battle" && battleStartRef.current > 0) {
+          const elapsed=(performance.now()-battleStartRef.current)/1000;
+          const remaining=Math.max(0,BATTLE_DURATION_SEC-elapsed);
+          setBattleTime(Math.ceil(remaining));
+          if (remaining<=0 && !endedRef.current) { endBattle(); }
+        }
+
         if (lms.length>0) processPose(lms);
         fpsCntRef.current++;
         const elapsed=now-lastFpsRef.current;
