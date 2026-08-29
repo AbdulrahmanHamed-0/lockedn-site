@@ -99,17 +99,39 @@ function isStandingUp(lms: Landmark[]) {
   return (a.y-s.y) > STAND_UP_VERTICAL;
 }
 
-function speak(text: string, rate=1.0) {
-  if (typeof window==="undefined"||!window.speechSynthesis) return;
+// ── Bulletproof speak function ──────────────────────────────────
+// Android Chrome bug: cancel() followed by speak() too quickly = silent failure
+// Fix: separate cancel and speak with proper delay, store utterance to prevent GC,
+// and add retry mechanism
+const lastUtteranceRef = { current: null as SpeechSynthesisUtterance | null };
+let voicesLoaded = false;
+let cachedVoices: SpeechSynthesisVoice[] = [];
 
-  const doSpeak = () => {
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate   = rate * 1.05;
-    utt.pitch  = 1.1;
-    utt.volume = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v=>
+// Pre-load voices
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  cachedVoices = window.speechSynthesis.getVoices();
+  if (cachedVoices.length > 0) voicesLoaded = true;
+  window.speechSynthesis.onvoiceschanged = () => {
+    cachedVoices = window.speechSynthesis.getVoices();
+    voicesLoaded = true;
+  };
+}
+
+function speak(text: string, rate = 1.0) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+  // Step 1: Cancel any current speech
+  window.speechSynthesis.cancel();
+
+  // Step 2: Create utterance IMMEDIATELY (before any async gap)
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate   = rate * 1.05;
+  utt.pitch  = 1.1;
+  utt.volume = 1;
+
+  // Pick voice from cached list
+  if (cachedVoices.length > 0) {
+    const preferred = cachedVoices.find(v =>
       (v.name.toLowerCase().includes("male") ||
        v.name.toLowerCase().includes("daniel") ||
        v.name.toLowerCase().includes("alex") ||
@@ -117,23 +139,33 @@ function speak(text: string, rate=1.0) {
       !v.name.toLowerCase().includes("whisper") &&
       !v.name.toLowerCase().includes("compact")
     );
-    if (preferred) utt.voice=preferred;
-    window.speechSynthesis.speak(utt);
-  };
-
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length > 0) {
-    // Voices already loaded (Android/Chrome)
-    setTimeout(doSpeak, 50);
-  } else {
-    // iOS Safari loads voices async — wait for the event
-    window.speechSynthesis.onvoiceschanged = () => {
-      window.speechSynthesis.onvoiceschanged = null;
-      setTimeout(doSpeak, 100);
-    };
-    // Fallback if onvoiceschanged never fires (some iOS versions)
-    setTimeout(doSpeak, 300);
+    if (preferred) utt.voice = preferred;
   }
+
+  // Store reference to prevent garbage collection (Android bug)
+  lastUtteranceRef.current = utt;
+
+  // Step 3: Speak after a delay — Android needs 150ms+ after cancel()
+  // iOS needs less but 150ms works for both
+  setTimeout(() => {
+    // Android Chrome sometimes pauses speechSynthesis when busy
+    // Resume it just in case
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    window.speechSynthesis.speak(utt);
+
+    // Step 4: Android safety net — check after 500ms if speech started
+    // If not, retry once
+    setTimeout(() => {
+      if (window.speechSynthesis.pending && !window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        setTimeout(() => {
+          window.speechSynthesis.speak(utt);
+        }, 100);
+      }
+    }, 500);
+  }, 150);
 }
 
 export default function BattleClient({ roomId }: Props) {
@@ -232,6 +264,33 @@ export default function BattleClient({ roomId }: Props) {
         to_id: isHostRef.current ? "guest" : "host",
         type: "ice_battle", payload: event.candidate.toJSON(),
       });
+    };
+
+    // ── Connection monitoring — auto-reconnect if it drops ────────
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      if (state === "connected") {
+        setRemoteReady(true);
+      } else if (state === "disconnected" || state === "failed") {
+        setRemoteReady(false);
+        // Try to reconnect after 2 seconds
+        setTimeout(() => {
+          if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+            // Close old connection and start fresh
+            pc.close();
+            pcRef.current = null;
+            startWebRTC();
+          }
+        }, 2000);
+      }
+    };
+
+    // ── ICE connection monitoring ──────────────────────────────────
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "failed") {
+        // ICE restart
+        pc.restartIce();
+      }
     };
 
     pcRef.current = pc;
@@ -383,6 +442,29 @@ export default function BattleClient({ roomId }: Props) {
     streamRef.current = stream;
     const video = videoRef.current;
     if (video) { video.srcObject=stream; await video.play(); }
+
+    // ── Monitor camera health — restart if track ends unexpectedly ─
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.onended = () => {
+        // Camera was killed (e.g. by OS, another app, or permission revoke)
+        // Try to restart
+        if (runningRef.current && screenRef.current !== "results") {
+          navigator.mediaDevices.getUserMedia({
+            video:{ width:{ideal:640}, height:{ideal:480},
+                    frameRate:{ideal:30,max:30}, facingMode:"user" },
+            audio:false,
+          }).then(newStream => {
+            streamRef.current = newStream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = newStream;
+              videoRef.current.play().catch(() => {});
+            }
+          }).catch(() => {});
+        }
+      };
+    }
+
     landmarkerRef.current = await createLandmarker();
     runningRef.current = true;
     // Start WebRTC for opponent PIP camera
@@ -571,13 +653,8 @@ export default function BattleClient({ roomId }: Props) {
     init();
 
     // Pre-load voices immediately — critical for iOS Safari
-    // which loads voices async and won't speak if they're not ready
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-        window.speechSynthesis.onvoiceschanged = null;
-      };
     }
 
     return ()=>{
@@ -615,6 +692,7 @@ export default function BattleClient({ roomId }: Props) {
   // ── Pose processing ──────────────────────────────────────────────
   function processPose(lms: Landmark[]) {
     const result = checkPosition(lms);
+    setChecks(result.checks);
     const wasOk = posOkRef.current;
     const nowOk = result.ok;
     posOkRef.current = nowOk;
